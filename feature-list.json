@@ -1,0 +1,215 @@
+{
+  "project": "Command Centre",
+  "mode": "unconstrained",
+  "created": "2026-04-11",
+  "updated": "2026-04-11",
+  "features": [
+    {
+      "id": "F001",
+      "category": "ui",
+      "priority": "critical",
+      "description": "Dashboard displays all active Claude Code sessions with real-time status indicators (active, waiting for input, waiting for permission, completed, errored). Sessions auto-appear when started and update without page refresh.",
+      "design_status": "not_started",
+      "depends_on": ["F006"],
+      "verification_steps": [
+        "Step 1: Start 3 Claude Code sessions with different --name values",
+        "Step 2: Open the dashboard in a browser",
+        "Step 3: Verify all 3 sessions appear as cards/rows with correct names and 'active' status",
+        "Step 4: Trigger a permission prompt in one session — verify the dashboard updates to 'waiting for permission' within 2 seconds",
+        "Step 5: Complete a session — verify it shows 'completed' status"
+      ],
+      "passes": false,
+      "notes": "This is the core value proposition. Must work via WebSocket (Socket.io) for real-time updates, not polling."
+    },
+    {
+      "id": "F002",
+      "category": "integration",
+      "priority": "critical",
+      "description": "Desktop toast notifications via Windows notification system when any session changes to a state requiring user attention (permission request, input needed, error). Notification includes session name and what's needed.",
+      "design_status": "not_started",
+      "depends_on": ["F006"],
+      "verification_steps": [
+        "Step 1: Start a Claude Code session with the Command Centre server running",
+        "Step 2: Trigger a permission prompt in the session",
+        "Step 3: Verify a Windows toast notification appears within 3 seconds",
+        "Step 4: Verify the notification shows the session name and the tool requesting permission",
+        "Step 5: Verify clicking the notification brings focus to the dashboard (or relevant terminal)"
+      ],
+      "passes": false,
+      "notes": "Use node-notifier or similar. Must work on Windows 10/11. Consider notification grouping if multiple sessions need attention simultaneously."
+    },
+    {
+      "id": "F003",
+      "category": "ui",
+      "priority": "high",
+      "description": "Permission approval/denial from the dashboard. When a session is waiting for permission, the dashboard shows the tool name, input summary, and Approve/Deny buttons. Clicking Approve/Deny sends the response back to the Claude Code session.",
+      "design_status": "not_started",
+      "depends_on": ["F001", "F009"],
+      "verification_steps": [
+        "Step 1: Start a Claude Code session that will trigger a permission prompt",
+        "Step 2: When the permission prompt appears, verify the dashboard shows tool name and input details",
+        "Step 3: Click 'Approve' on the dashboard",
+        "Step 4: Verify the Claude Code session receives the approval and continues execution",
+        "Step 5: Repeat with 'Deny' — verify the session receives the denial and handles it gracefully"
+      ],
+      "passes": false,
+      "notes": "VALIDATED 2026-04-11: HTTP hooks fully support bidirectional approve/deny. PreToolUse hooks return permissionDecision (allow/deny/ask/defer) in response body. Server holds request open, dashboard shows buttons, user clicks, server responds. 30s default timeout (configurable). Can also modify tool input via updatedInput field."
+    },
+    {
+      "id": "F004",
+      "category": "ui",
+      "priority": "high",
+      "description": "Session naming and labelling. Each session card shows a human-readable name (from --name flag or project folder name), the project directory, how long it's been running, and a colour-coded status badge.",
+      "design_status": "not_started",
+      "depends_on": ["F001"],
+      "verification_steps": [
+        "Step 1: Start a session with --name 'Auth Refactor'",
+        "Step 2: Start a session without --name (should fall back to project folder name)",
+        "Step 3: Verify both sessions show correct names on the dashboard",
+        "Step 4: Verify elapsed time updates in real-time",
+        "Step 5: Verify status badges are colour-coded (green=active, amber=waiting, red=error, grey=completed)"
+      ],
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "F005",
+      "category": "ui",
+      "priority": "medium",
+      "description": "Launch new Claude Code sessions from the dashboard. User specifies project directory, session name, and optional initial prompt. Session spawns in a new terminal window/tab.",
+      "design_status": "not_started",
+      "depends_on": ["F001"],
+      "verification_steps": [
+        "Step 1: Open the dashboard and click 'New Session'",
+        "Step 2: Select or type a project directory",
+        "Step 3: Enter a session name and optional initial prompt",
+        "Step 4: Click 'Launch'",
+        "Step 5: Verify a new terminal window opens with Claude Code running in the specified directory",
+        "Step 6: Verify the new session appears on the dashboard within 5 seconds"
+      ],
+      "passes": false,
+      "notes": "Spawning a terminal window from a web server requires platform-specific shell commands. Must be portable — detect OS and use appropriate command."
+    },
+    {
+      "id": "F006",
+      "category": "infrastructure",
+      "priority": "critical",
+      "description": "Event receiver server (Express + Socket.io) that accepts HTTP POST events from Claude Code hooks, tracks session state, and broadcasts updates to connected dashboard clients via WebSocket.",
+      "design_status": "not_started",
+      "depends_on": [],
+      "verification_steps": [
+        "Step 1: Start the server with `npm start` (or equivalent)",
+        "Step 2: Send a mock SessionStart event via curl/Postman to the hook endpoint",
+        "Step 3: Verify the server logs the event and creates a session record",
+        "Step 4: Send a mock PermissionRequest event for the same session",
+        "Step 5: Verify the session state updates to 'waiting_for_permission'",
+        "Step 6: Connect a WebSocket client and verify it receives real-time event broadcasts"
+      ],
+      "passes": false,
+      "notes": "This is the foundation. All other features depend on this. Must handle concurrent events from multiple sessions without race conditions."
+    },
+    {
+      "id": "F007",
+      "category": "ui",
+      "priority": "medium",
+      "description": "Live activity feed showing recent events across all sessions in chronological order. Each event shows timestamp, session name, event type, and relevant details (tool name, file path, etc.).",
+      "design_status": "not_started",
+      "depends_on": ["F001", "F006"],
+      "verification_steps": [
+        "Step 1: Start 2 sessions generating events",
+        "Step 2: Open the dashboard activity feed",
+        "Step 3: Verify events from both sessions appear interleaved chronologically",
+        "Step 4: Verify each event shows session name (colour-coded), event type, and details",
+        "Step 5: Verify the feed auto-scrolls to show new events"
+      ],
+      "passes": false,
+      "notes": "Consider a max event buffer (e.g., last 500 events) to prevent memory growth."
+    },
+    {
+      "id": "F008",
+      "category": "ui",
+      "priority": "low",
+      "description": "Cost and token tracking per session. Each session card shows estimated tokens used and cost in USD. A summary bar shows total across all sessions.",
+      "design_status": "not_started",
+      "depends_on": ["F001", "F006"],
+      "verification_steps": [
+        "Step 1: Start a session and let it run several tool calls",
+        "Step 2: Verify the session card shows token count and estimated cost",
+        "Step 3: Start a second session",
+        "Step 4: Verify the summary bar shows combined totals",
+        "Step 5: Verify values update in real-time as sessions consume tokens"
+      ],
+      "passes": false,
+      "notes": "Token/cost data may not be available in hook payloads. If not, this feature should read from ~/.claude/ session files as a fallback, or be descoped."
+    },
+    {
+      "id": "F009",
+      "category": "infrastructure",
+      "priority": "critical",
+      "description": "Validate that Claude Code HTTP hooks can be used bidirectionally — specifically whether a hook response can approve/deny a permission request. Document the exact hook payload format and response schema.",
+      "design_status": "not_started",
+      "depends_on": [],
+      "verification_steps": [
+        "Step 1: Configure a PreToolUse HTTP hook in Claude Code settings pointing at a test server",
+        "Step 2: Start a Claude Code session and trigger a tool use",
+        "Step 3: Log the full HTTP request payload received by the test server",
+        "Step 4: Return different response payloads (approve, deny, no response) and observe Claude Code behaviour",
+        "Step 5: Document the payload format, required response schema, and timeout behaviour",
+        "Step 6: Test with PermissionRequest event specifically (if it exists as a separate event)"
+      ],
+      "passes": false,
+      "notes": "COMPLETED 2026-04-11: Validated. PreToolUse HTTP hooks support full bidirectional control. Response format: { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow|deny|ask|defer', permissionDecisionReason: 'text' } }. Must return 2xx status (non-2xx = non-blocking error, not denial). PermissionRequest is a separate event that fires only when user would see a dialog. Both support approve/deny responses."
+    },
+    {
+      "id": "F010",
+      "category": "infrastructure",
+      "priority": "critical",
+      "description": "Claude Code settings integration — automatic deployment of HTTP hook configuration. The tool provides a setup command that adds the necessary HTTP hook entries to the user's Claude Code settings (or generates a config snippet to paste).",
+      "design_status": "not_started",
+      "depends_on": ["F006"],
+      "verification_steps": [
+        "Step 1: Run the setup command on a clean machine",
+        "Step 2: Verify it detects the Claude Code settings file location",
+        "Step 3: Verify it adds HTTP hook entries for relevant events (SessionStart, PermissionRequest, PostToolUse, SessionEnd)",
+        "Step 4: Verify existing settings are preserved (not overwritten)",
+        "Step 5: Start a Claude Code session and verify events flow to the Command Centre server"
+      ],
+      "passes": false,
+      "notes": "Must be portable — detect settings file location on Windows, macOS, Linux. For the Launcher integration path, this config could also be injected via the existing settings sync mechanism."
+    },
+    {
+      "id": "F011",
+      "category": "infrastructure",
+      "priority": "high",
+      "description": "Portable configuration. All machine-specific values (port, paths) stored in a config file with sensible defaults. No hardcoded paths. Works on Windows, macOS, and Linux without modification.",
+      "design_status": "not_started",
+      "depends_on": [],
+      "verification_steps": [
+        "Step 1: Clone the repo to a fresh machine (or different directory)",
+        "Step 2: Run npm install",
+        "Step 3: Run the server with default config — verify it starts without errors",
+        "Step 4: Verify config file is auto-created with defaults on first run",
+        "Step 5: Modify a config value (e.g., port) — verify the change takes effect on restart"
+      ],
+      "passes": false,
+      "notes": "Use XDG-style config discovery or a local config.json in the project root. Defaults must work out of the box."
+    },
+    {
+      "id": "F012",
+      "category": "infrastructure",
+      "priority": "medium",
+      "description": "npm package with bin entry so the tool can be installed globally and run as a CLI command (e.g., `npx claude-command-centre` or `cc-dashboard`).",
+      "design_status": "not_started",
+      "depends_on": ["F006", "F011"],
+      "verification_steps": [
+        "Step 1: Run npm pack and inspect the package",
+        "Step 2: Install globally with npm install -g",
+        "Step 3: Run the CLI command from any directory",
+        "Step 4: Verify the server starts and dashboard opens in browser",
+        "Step 5: Verify npx usage works without global install"
+      ],
+      "passes": false,
+      "notes": "Consider publishing to npm for easy sharing. Package name TBD — check availability."
+    }
+  ]
+}

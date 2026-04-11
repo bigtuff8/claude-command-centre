@@ -1,0 +1,56 @@
+=== Harness Session 2026-04-11 ===
+Mode: Unconstrained
+Harness: Build
+Brief: Build a command centre / dashboard for managing multiple Claude Code sessions on Windows. Must be portable and shareable across machines. Should surface permission requests, input needs, and completion notifications from all active sessions in one place.
+
+--- Initialisation ---
+Project type: New
+Standards loaded: None (Unconstrained mode)
+Features identified: 12 (0 complete, 12 to do)
+  - Critical: F001 (session dashboard), F002 (notifications), F006 (event server), F009 (hook validation), F010 (settings integration)
+  - High: F003 (approve/deny), F004 (session labelling), F011 (portable config)
+  - Medium: F005 (launch sessions), F007 (activity feed), F012 (npm package)
+  - Low: F008 (cost tracking)
+Design status: Not started
+Gaps identified:
+  - F009 MUST be validated before design — determines if approve/deny from dashboard is feasible
+  - Token/cost data availability in hook payloads unknown — may affect F008
+  - Happy Coder hook passthrough untested — may affect F008 priority
+
+Tech stack decision: Node.js/TypeScript, Express + Socket.io, vanilla HTML/CSS/JS frontend
+Repo: GitHub (to be created — shareable, portable)
+User priority order: 1(sessions), 2(notifications), 3(approve/deny), 6(naming), 7(launch), 4(activity), 5(cost), 8(happy coder)
+
+F009 VALIDATION COMPLETE (2026-04-11):
+  - HTTP hooks are FULLY BIDIRECTIONAL
+  - PreToolUse hooks can return: allow, deny, ask, defer
+  - Response format: { hookSpecificOutput: { permissionDecision, permissionDecisionReason } }
+  - Must return 2xx status (non-2xx = non-blocking error)
+  - 30s default timeout, configurable
+  - Can also modify tool input via updatedInput field
+  - PermissionRequest is a SEPARATE event (fires only when user would see a dialog)
+  - F003 (approve/deny from dashboard) IS FEASIBLE — proceed with design
+
+--- Designer ---
+Direction chosen: Mission Control (Direction 1)
+Research: design-research.md written (trends, bleeding edge, competitor analysis, white space)
+Design spec: design-spec.md written (full colour palette, typography, spacing, components, states, animations, page specs, responsive, accessibility)
+Prototype: prototype/ built (interactive HTML/CSS/JS with mocked data)
+  - Concept pages in concepts/ (3 directions presented, user chose Direction 1)
+  - Prototype iterations:
+    1. Initial build — full grid, sidebar, permission bar, activity feed, command palette
+    2. Fix: sidebar expand button after collapse, "All Sessions" back button when filtered
+    3. Add: resizable panels (sidebar drag, activity feed drag)
+  - User approved prototype with all 3 iterations
+Architecture: ARCHITECTURE.md written (hook payloads, permission holding pattern, server structure, data flow, config, security, failure modes)
+Design iteration count: 3 (initial + 2 amendment rounds)
+Status: APPROVED — ready for Developer phase
+
+--- Developer ---
+[Not started]
+
+--- Tester ---
+[Not started]
+
+--- Release Manager ---
+[Not started]
