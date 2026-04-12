@@ -24,12 +24,19 @@ socket.on('init', (data) => {
 });
 
 socket.on('session-added', (session) => {
-  sessions.unshift(session);
-  showToast('info', 'New session: ' + escapeHtml(session.name));
+  console.log('[CC] session-added:', session.name);
+  const existing = sessions.findIndex(s => s.id === session.id);
+  if (existing === -1) {
+    sessions.unshift(session);
+    showToast('info', 'New session: ' + escapeHtml(session.name));
+  } else {
+    sessions[existing] = session;
+  }
   renderAll();
 });
 
 socket.on('session-updated', (updated) => {
+  console.log('[CC] session-updated:', updated.name, updated.status, 'tools:', updated.toolCount);
   const idx = sessions.findIndex(s => s.id === updated.id);
   if (idx !== -1) {
     sessions[idx] = updated;
@@ -40,11 +47,10 @@ socket.on('session-updated', (updated) => {
 });
 
 socket.on('feed-event', (event) => {
+  console.log('[CC] feed-event:', event.sessionName, event.toolName, event.detail);
   feedEvents.unshift(event);
   if (feedEvents.length > 200) feedEvents.length = 200;
-  renderFeed();
-  updateMetrics();
-  flashFirstFeedItem();
+  renderAll();
 });
 
 socket.on('permission-requested', (data) => {
@@ -334,12 +340,17 @@ function updateTitle() {
 }
 
 function renderAll() {
-  renderSidebar();
-  renderGrid();
-  renderPermissions();
-  renderFeed();
-  updateMetrics();
-  updateTitle();
+  try {
+    renderSidebar();
+    renderGrid();
+    renderPermissions();
+    renderFeed();
+    updateMetrics();
+    updateTitle();
+    console.log('[CC] renderAll complete — sessions:', sessions.length, 'feed:', feedEvents.length);
+  } catch (err) {
+    console.error('[CC] renderAll ERROR:', err);
+  }
 }
 
 // === INTERACTIONS ===

@@ -47,7 +47,52 @@ Design iteration count: 3 (initial + 2 amendment rounds)
 Status: APPROVED — ready for Developer phase
 
 --- Developer ---
-[Not started]
+Core build complete (2026-04-12):
+  - TypeScript project: 10 source files across src/ (types, config, state, services, routes, socket, server, index, setup)
+  - Dependencies: express, socket.io, node-notifier, open
+  - Compiles with zero errors
+  - Server starts on localhost:4111, auto-creates config.json
+  - Hook endpoints verified: SessionStart, PostToolUse, PreToolUse (auto-pass + hold), SessionEnd
+  - Setup script verified: merges hooks into existing ~/.claude/settings.json without breaking permissions/env
+  - Dashboard: public/ (index.html, styles.css, app.js) — Socket.io wired, all interactions functional
+  - Live test: hooks fire from real Claude Code sessions (confirmed in server logs)
+
+Known issues found during live testing:
+  1. Server process needs to run in its own terminal — can't be backgrounded from within Claude Code
+  2. Sessions started before hook injection are invisible (expected — hooks load at session start)
+  3. "New Session" button spawns raw claude, not the launcher
+  4. No text input capability — only approve/deny
+
+Features self-assessed:
+  - F001 (dashboard): Built, needs full e2e verification
+  - F002 (notifications): Built, untested on real permission event
+  - F003 (approve/deny): Built, protocol verified, e2e untested
+  - F004 (labelling): Built, derives from cwd
+  - F005 (launch): Built but needs redesign (must use launcher)
+  - F006 (server): Built and verified
+  - F007 (activity feed): Built, needs e2e verification
+  - F009 (hook validation): Complete
+  - F010 (setup): Built and verified
+  - F011 (config): Built and verified
+  - F012 (npm package): Partial (package.json ready, not published)
+
+Backlog created: BACKLOG.md (0.1.0 through 0.4.0+ with future ideas)
+
+LIVE TEST PASSED (2026-04-12):
+  - Server running in separate terminal on localhost:4111
+  - 3 sessions detected: this session (Command Centre), family-hub-v2, and 1 other
+  - All 3 appeared on dashboard with real-time activity
+  - Hook events flowing: tool calls, file modifications tracked
+  - Dashboard rendering confirmed working end-to-end
+  - F001 (dashboard): VERIFIED
+  - F006 (server): VERIFIED
+  - F007 (activity feed): VERIFIED
+  - F004 (session labelling): VERIFIED (names derived from project folders)
+
+  Still to verify:
+  - F002 (notifications): Need permission event to trigger toast
+  - F003 (approve/deny): Need non-pre-approved tool to test hold pattern
+  - F005 (launch sessions): Needs redesign for launcher integration
 
 --- Tester ---
 [Not started]
