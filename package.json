@@ -1,0 +1,31 @@
+{
+  "name": "claude-command-centre",
+  "version": "0.1.0",
+  "description": "Web dashboard for monitoring and managing multiple Claude Code sessions",
+  "main": "dist/index.js",
+  "bin": {
+    "command-centre": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch & node --watch dist/index.js",
+    "setup": "node dist/setup.js"
+  },
+  "keywords": ["claude", "code", "dashboard", "session", "monitor"],
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.21.0",
+    "socket.io": "^4.8.0",
+    "node-notifier": "^10.0.1",
+    "open": "^10.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
