@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Command Centre — Direction 3: The Switchboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #1a1a2e;
+  --bg-strip: #1e1e35;
+  --bg-strip-hover: #24243d;
+  --bg-expanded: #16162b;
+  --text: #e0e0e0;
+  --text-dim: rgba(224,224,224,0.5);
+  --text-muted: rgba(224,224,224,0.3);
+  --indigo: #6366f1;
+  --indigo-dim: rgba(99,102,241,0.15);
+  --coral: #fb7185;
+  --sky: #38bdf8;
+  --mint: #34d399;
+  --lavender: #a78bfa;
+  --peach: #fbbf24;
+  --border: rgba(255,255,255,0.06);
+}
+body { font-family: 'Space Grotesk', -apple-system, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+/* Top bar — minimal */
+.top-bar {
+  padding: 16px 32px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+}
+.top-left { display: flex; align-items: baseline; gap: 24px; }
+.brand { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+.brand span { color: var(--indigo); }
+.summary { font-size: 13px; color: var(--text-dim); display: flex; gap: 20px; }
+.summary strong { color: var(--text); font-weight: 500; }
+.cmd-trigger {
+  padding: 8px 20px; border-radius: 10px; border: 1px solid var(--border);
+  background: rgba(255,255,255,0.03); color: var(--text-dim); font-size: 13px;
+  font-family: inherit; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: all 0.2s;
+}
+.cmd-trigger:hover { background: rgba(255,255,255,0.06); border-color: var(--indigo); color: var(--text); }
+.cmd-trigger kbd { background: rgba(255,255,255,0.08); border-radius: 4px; padding: 2px 6px; font-size: 11px; font-family: 'Fira Code', monospace; }
+
+/* Session strips */
+.strips-container { flex: 1; overflow-y: auto; padding: 0 32px 32px; scroll-snap-type: y proximity; }
+
+.strip {
+  background: var(--bg-strip); border: 1px solid var(--border); border-radius: 12px;
+  margin-bottom: 8px; transition: all 0.3s ease; cursor: pointer; overflow: hidden;
+  scroll-snap-align: start;
+}
+.strip:hover { background: var(--bg-strip-hover); }
+
+/* Strip that needs attention floats up */
+.strip.needs-attention {
+  border-color: rgba(251,113,133,0.4); box-shadow: 0 0 20px rgba(251,113,133,0.08);
+  order: -1; animation: gentlePulse 3s infinite;
+}
+@keyframes gentlePulse { 0%, 100% { box-shadow: 0 0 20px rgba(251,113,133,0.08); } 50% { box-shadow: 0 0 30px rgba(251,113,133,0.15); } }
+
+.strip-main {
+  padding: 16px 24px; display: flex; align-items: center; gap: 16px;
+}
+
+.strip-color { width: 4px; height: 36px; border-radius: 2px; flex-shrink: 0; transition: opacity 0.3s; }
+.strip-color.coral { background: var(--coral); }
+.strip-color.sky { background: var(--sky); }
+.strip-color.mint { background: var(--mint); }
+.strip-color.lavender { background: var(--lavender); }
+.strip-color.peach { background: var(--peach); }
+.strip-color.idle { opacity: 0.4; }
+
+.strip-name { font-size: 15px; font-weight: 600; min-width: 180px; }
+.strip-status {
+  font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 6px;
+  text-transform: uppercase; letter-spacing: 0.5px; min-width: 80px; text-align: center;
+}
+.strip-status.active { background: rgba(52,211,153,0.15); color: var(--mint); }
+.strip-status.waiting { background: rgba(251,113,133,0.15); color: var(--coral); animation: statusPulse 2s infinite; }
+@keyframes statusPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+.strip-status.completed { background: rgba(255,255,255,0.05); color: var(--text-dim); }
+.strip-activity { flex: 1; font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+.strip-activity code { font-family: 'Fira Code', monospace; font-size: 12px; color: var(--text); background: rgba(255,255,255,0.05); padding: 1px 5px; border-radius: 4px; }
+.strip-time { font-size: 13px; color: var(--text-muted); font-variant-numeric: tabular-nums; min-width: 60px; text-align: right; }
+.strip-actions { display: flex; gap: 6px; }
+.strip-btn { padding: 6px 14px; border-radius: 8px; border: 1px solid; background: transparent; font-family: inherit; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s; }
+.strip-btn.approve { border-color: var(--mint); color: var(--mint); }
+.strip-btn.approve:hover { background: rgba(52,211,153,0.15); }
+.strip-btn.deny { border-color: var(--coral); color: var(--coral); }
+.strip-btn.deny:hover { background: rgba(251,113,133,0.15); }
+
+/* Expanded strip content */
+.strip-expanded {
+  max-height: 0; overflow: hidden; transition: max-height 0.4s ease;
+  background: var(--bg-expanded); border-top: 1px solid var(--border);
+}
+.strip.open .strip-expanded { max-height: 300px; }
+.strip-feed { padding: 12px 24px; font-size: 12px; font-family: 'Fira Code', monospace; line-height: 2; }
+.feed-line { display: flex; gap: 12px; }
+.feed-line .ft { color: var(--text-muted); min-width: 55px; }
+.feed-line .ftool { color: var(--indigo); min-width: 50px; }
+.feed-line .fdetail { color: var(--text-dim); }
+.feed-line .fdetail .fname { color: var(--text); }
+
+/* Command Palette Overlay */
+.cmd-palette-overlay {
+  display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(8px);
+  z-index: 100; justify-content: center; padding-top: 15vh;
+}
+.cmd-palette-overlay.visible { display: flex; }
+.cmd-palette {
+  width: 560px; background: var(--bg-strip); border: 1px solid rgba(99,102,241,0.3);
+  border-radius: 16px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  animation: cmdIn 0.15s ease-out;
+}
+@keyframes cmdIn { from { opacity: 0; transform: scale(0.95) translateY(-10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+.cmd-input-wrap { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+.cmd-input-wrap svg { width: 18px; height: 18px; color: var(--indigo); }
+.cmd-input { flex: 1; background: transparent; border: none; outline: none; color: var(--text); font-family: inherit; font-size: 15px; }
+.cmd-input::placeholder { color: var(--text-muted); }
+.cmd-results { padding: 8px; max-height: 300px; overflow-y: auto; }
+.cmd-result { padding: 10px 14px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
+.cmd-result:hover { background: var(--indigo-dim); }
+.cmd-result-left { display: flex; align-items: center; gap: 10px; }
+.cmd-result-icon { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+.cmd-result-text { font-size: 13px; font-weight: 500; }
+.cmd-result-hint { font-size: 11px; color: var(--text-muted); }
+.cmd-result-key { font-size: 11px; color: var(--text-dim); font-family: 'Fira Code', monospace; }
+.cmd-footer { padding: 10px 20px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-muted); display: flex; gap: 16px; }
+.cmd-footer kbd { background: rgba(255,255,255,0.08); border-radius: 3px; padding: 1px 5px; font-family: 'Fira Code', monospace; font-size: 10px; }
+
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="top-bar">
+  <div class="top-left">
+    <div class="brand"><span>&#9649;</span> Command Centre</div>
+    <div class="summary">
+      <span><strong>4</strong> sessions</span>
+      <span><strong style="color:var(--coral)">1</strong> needs attention</span>
+      <span><strong>127.4k</strong> tokens</span>
+    </div>
+  </div>
+  <button class="cmd-trigger" onclick="togglePalette()">
+    Search or command... <kbd>Ctrl</kbd><kbd>K</kbd>
+  </button>
+</div>
+
+<!-- Session Strips -->
+<div class="strips-container">
+
+  <!-- Auth Refactor — needs attention (floats to top) -->
+  <div class="strip needs-attention" onclick="toggleStrip(this)">
+    <div class="strip-main">
+      <div class="strip-color coral"></div>
+      <div class="strip-name">Auth Refactor</div>
+      <div class="strip-status waiting">Waiting</div>
+      <div class="strip-activity">
+        Permission needed: <code>npm run test -- --coverage</code>
+      </div>
+      <div class="strip-actions">
+        <button class="strip-btn deny" onclick="event.stopPropagation()">Deny</button>
+        <button class="strip-btn approve" onclick="event.stopPropagation()">Approve</button>
+      </div>
+      <div class="strip-time">12m</div>
+    </div>
+    <div class="strip-expanded">
+      <div class="strip-feed">
+        <div class="feed-line"><span class="ft">14:25</span><span class="ftool">Read</span><span class="fdetail"><span class="fname">AuthMiddleware.cs</span></span></div>
+        <div class="feed-line"><span class="ft">14:26</span><span class="ftool">Edit</span><span class="fdetail"><span class="fname">AuthMiddleware.cs</span> — extracted ValidateJwt()</span></div>
+        <div class="feed-line"><span class="ft">14:28</span><span class="ftool">Edit</span><span class="fdetail"><span class="fname">TokenService.cs</span></span></div>
+        <div class="feed-line"><span class="ft">14:30</span><span class="ftool">Edit</span><span class="fdetail"><span class="fname">AuthService.cs</span></span></div>
+        <div class="feed-line"><span class="ft">14:32</span><span class="ftool" style="color:var(--coral)">Perm</span><span class="fdetail" style="color:var(--coral)">Bash: npm run test -- --coverage</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- OOH Dashboard — active -->
+  <div class="strip" onclick="toggleStrip(this)">
+    <div class="strip-main">
+      <div class="strip-color sky"></div>
+      <div class="strip-name">OOH Dashboard</div>
+      <div class="strip-status active">Active</div>
+      <div class="strip-activity">
+        Editing <code>Dashboard.razor</code> — adding telemetry data binding
+      </div>
+      <div class="strip-actions"></div>
+      <div class="strip-time">34m</div>
+    </div>
+    <div class="strip-expanded">
+      <div class="strip-feed">
+        <div class="feed-line"><span class="ft">14:28</span><span class="ftool">Read</span><span class="fdetail"><span class="fname">ThingsboardService.cs</span></span></div>
+        <div class="feed-line"><span class="ft">14:29</span><span class="ftool">Edit</span><span class="fdetail"><span class="fname">Dashboard.razor</span> — temperature widget</span></div>
+        <div class="feed-line"><span class="ft">14:31</span><span class="ftool">Edit</span><span class="fdetail"><span class="fname">Dashboard.razor</span> — humidity widget</span></div>
+        <div class="feed-line"><span class="ft">14:32</span><span class="ftool">Edit</span><span class="fdetail"><span class="fname">Dashboard.razor.cs</span> — Timer-based polling</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Zendesk Integration — active -->
+  <div class="strip" onclick="toggleStrip(this)">
+    <div class="strip-main">
+      <div class="strip-color mint"></div>
+      <div class="strip-name">Zendesk Integration</div>
+      <div class="strip-status active">Active</div>
+      <div class="strip-activity">
+        Running Playwright tests — 14/18 passing, investigating <code>ticket-creation.spec.ts</code>
+      </div>
+      <div class="strip-actions"></div>
+      <div class="strip-time">1h 12m</div>
+    </div>
+    <div class="strip-expanded">
+      <div class="strip-feed">
+        <div class="feed-line"><span class="ft">14:28</span><span class="ftool">Bash</span><span class="fdetail">npx playwright test --reporter=list</span></div>
+        <div class="feed-line"><span class="ft">14:29</span><span class="ftool" style="color:var(--mint)">Pass</span><span class="fdetail"><span class="fname">ticket-list.spec.ts</span> (4/4)</span></div>
+        <div class="feed-line"><span class="ft">14:29</span><span class="ftool" style="color:var(--mint)">Pass</span><span class="fdetail"><span class="fname">ticket-detail.spec.ts</span> (6/6)</span></div>
+        <div class="feed-line"><span class="ft">14:30</span><span class="ftool" style="color:var(--coral)">Fail</span><span class="fdetail"><span class="fname">ticket-creation.spec.ts</span> (2/4 failed)</span></div>
+        <div class="feed-line"><span class="ft">14:31</span><span class="ftool">Read</span><span class="fdetail"><span class="fname">ticket-creation.spec.ts</span></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- IOT Admin — active -->
+  <div class="strip" onclick="toggleStrip(this)">
+    <div class="strip-main">
+      <div class="strip-color lavender"></div>
+      <div class="strip-name">IOT Admin Panel</div>
+      <div class="strip-status active">Active</div>
+      <div class="strip-activity">
+        Reading architecture docs — mapping device registration flow
+      </div>
+      <div class="strip-actions"></div>
+      <div class="strip-time">8m</div>
+    </div>
+    <div class="strip-expanded">
+      <div class="strip-feed">
+        <div class="feed-line"><span class="ft">14:24</span><span class="ftool">Read</span><span class="fdetail"><span class="fname">PROJECT_STATUS.md</span></span></div>
+        <div class="feed-line"><span class="ft">14:25</span><span class="ftool">Read</span><span class="fdetail"><span class="fname">ARCHITECTURE.md</span></span></div>
+        <div class="feed-line"><span class="ft">14:27</span><span class="ftool">Glob</span><span class="fdetail">src/Services/**/*.cs (8 files)</span></div>
+        <div class="feed-line"><span class="ft">14:28</span><span class="ftool">Read</span><span class="fdetail"><span class="fname">DeviceService.cs</span></span></div>
+        <div class="feed-line"><span class="ft">14:31</span><span class="ftool">Grep</span><span class="fdetail">Searching "provision" across services</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Holiday Tracker — completed -->
+  <div class="strip" style="opacity:0.5" onclick="toggleStrip(this)">
+    <div class="strip-main">
+      <div class="strip-color peach idle"></div>
+      <div class="strip-name">Holiday Tracker Fix</div>
+      <div class="strip-status completed">Complete</div>
+      <div class="strip-activity">
+        Fixed date validation bug. Committed and pushed. All 12 tests passing.
+      </div>
+      <div class="strip-actions"></div>
+      <div class="strip-time">45m ago</div>
+    </div>
+    <div class="strip-expanded">
+      <div class="strip-feed">
+        <div class="feed-line"><span class="ft">13:42</span><span class="ftool">Read</span><span class="fdetail"><span class="fname">LeaveRequestForm.razor</span></span></div>
+        <div class="feed-line"><span class="ft">13:48</span><span class="ftool">Edit</span><span class="fdetail"><span class="fname">LeaveRequestForm.razor</span> — fixed date validation</span></div>
+        <div class="feed-line"><span class="ft">13:52</span><span class="ftool">Bash</span><span class="fdetail">dotnet test (12/12 passed)</span></div>
+        <div class="feed-line"><span class="ft">13:55</span><span class="ftool">Bash</span><span class="fdetail">git commit + git push</span></div>
+        <div class="feed-line"><span class="ft">13:56</span><span class="ftool" style="color:var(--mint)">Done</span><span class="fdetail">Session completed successfully</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Command Palette -->
+<div class="cmd-palette-overlay" id="cmdPalette">
+  <div class="cmd-palette">
+    <div class="cmd-input-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input class="cmd-input" placeholder="Search sessions, approve all, launch new..." autofocus id="cmdInput">
+    </div>
+    <div class="cmd-results">
+      <div class="cmd-result">
+        <div class="cmd-result-left">
+          <div class="cmd-result-icon" style="background:rgba(251,113,133,0.15);color:var(--coral)">&#9888;</div>
+          <div class="cmd-result-text">Approve Auth Refactor permission</div>
+        </div>
+        <div class="cmd-result-key">Enter</div>
+      </div>
+      <div class="cmd-result">
+        <div class="cmd-result-left">
+          <div class="cmd-result-icon" style="background:var(--indigo-dim);color:var(--indigo)">+</div>
+          <div class="cmd-result-text">Launch new session</div>
+        </div>
+        <div class="cmd-result-key">Ctrl+N</div>
+      </div>
+      <div class="cmd-result">
+        <div class="cmd-result-left">
+          <div class="cmd-result-icon" style="background:rgba(52,211,153,0.15);color:var(--mint)">&#10003;</div>
+          <div class="cmd-result-text">Approve all pending</div>
+        </div>
+        <div class="cmd-result-key">Ctrl+A</div>
+      </div>
+      <div class="cmd-result">
+        <div class="cmd-result-left">
+          <div class="cmd-result-icon" style="background:rgba(56,189,248,0.15);color:var(--sky)">&#9673;</div>
+          <div class="cmd-result-text">Jump to OOH Dashboard</div>
+        </div>
+        <div class="cmd-result-key">2</div>
+      </div>
+      <div class="cmd-result">
+        <div class="cmd-result-left">
+          <div class="cmd-result-icon" style="background:rgba(255,255,255,0.05);color:var(--text-dim)">&#8981;</div>
+          <div class="cmd-result-text">Filter: show only waiting sessions</div>
+        </div>
+        <div class="cmd-result-hint">status:waiting</div>
+      </div>
+    </div>
+    <div class="cmd-footer">
+      <span><kbd>&#8593;&#8595;</kbd> navigate</span>
+      <span><kbd>Enter</kbd> select</span>
+      <span><kbd>Esc</kbd> close</span>
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleStrip(el) {
+  el.classList.toggle('open');
+}
+
+function togglePalette() {
+  const p = document.getElementById('cmdPalette');
+  p.classList.toggle('visible');
+  if (p.classList.contains('visible')) {
+    document.getElementById('cmdInput').focus();
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.key === 'k') {
+    e.preventDefault();
+    togglePalette();
+  }
+  if (e.key === 'Escape') {
+    document.getElementById('cmdPalette').classList.remove('visible');
+  }
+});
+</script>
+</body>
+</html>

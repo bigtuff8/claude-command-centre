@@ -17,6 +17,7 @@ export function getOrCreateSession(sessionId: string, cwd?: string, permissionMo
       name,
       project: cwd || '',
       status: 'active',
+      sessionType: 'hook-monitored',
       permissionMode: permissionMode || 'default',
       startedAt: new Date(),
       lastActivity: new Date(),
@@ -24,6 +25,8 @@ export function getOrCreateSession(sessionId: string, cwd?: string, permissionMo
       filesModified: new Set(),
       events: [],
       pendingPermission: null,
+      transcriptPath: null,
+      terminalPid: null,
     };
     sessions.set(sessionId, session);
   }
@@ -38,6 +41,39 @@ export function getSession(sessionId: string): Session | undefined {
 
 export function getAllSessions(): Session[] {
   return Array.from(sessions.values());
+}
+
+export function removeSession(sessionId: string): boolean {
+  return sessions.delete(sessionId);
+}
+
+export function createSdkSession(sessionId: string, cwd: string, name: string, permissionMode: string): Session {
+  const session: Session = {
+    id: sessionId,
+    name,
+    project: cwd,
+    status: 'active',
+    sessionType: 'sdk-managed',
+    permissionMode,
+    startedAt: new Date(),
+    lastActivity: new Date(),
+    toolCount: 0,
+    filesModified: new Set(),
+    events: [],
+    pendingPermission: null,
+    transcriptPath: null,
+    terminalPid: null,
+  };
+  sessions.set(sessionId, session);
+  return session;
+}
+
+export function renameSession(sessionId: string, newName: string): Session | undefined {
+  const session = sessions.get(sessionId);
+  if (session) {
+    session.name = newName;
+  }
+  return session;
 }
 
 export function addEvent(session: Session, event: HookEvent): void {
@@ -65,10 +101,12 @@ export function sessionToDTO(session: Session): SessionDTO {
     name: session.name,
     project: session.project,
     status: session.status,
+    sessionType: session.sessionType,
     startedAt: session.startedAt.toISOString(),
     lastActivity: session.lastActivity.toISOString(),
     toolCount: session.toolCount,
     filesModified: Array.from(session.filesModified),
+    hasTranscript: !!session.transcriptPath,
     pendingPermission: session.pendingPermission ? {
       toolName: session.pendingPermission.toolName,
       toolInput: session.pendingPermission.toolInput,

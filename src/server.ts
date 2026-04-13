@@ -3,9 +3,12 @@ import { createServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
 import * as path from 'path';
 import { AppConfig } from './types';
-import { initSessionStore } from './state/sessions';
+import { initSessionStore, getSession } from './state/sessions';
 import { initPermissionService } from './services/permission';
 import { initNotifications } from './services/notifications';
+import { initSdkSessionService } from './services/sdk-session';
+import { readTranscript, readUsageFromTranscript } from './services/transcript';
+import { focusTerminalWindow } from './services/focus';
 import { createHooksRouter } from './routes/hooks';
 import { initSocketHandler } from './socket/handler';
 
@@ -25,6 +28,7 @@ export function createApp(config: AppConfig) {
   initSessionStore(config);
   initPermissionService(config, broadcast);
   initNotifications(config);
+  initSdkSessionService(broadcast);
 
   // Middleware
   app.use(express.json({ limit: '1mb' }));
@@ -49,6 +53,76 @@ export function createApp(config: AppConfig) {
       sessions: getAllSessions().map(sessionToDTO),
       feedEvents: getFeedEvents(),
     });
+  });
+
+  // API: cleanup test sessions (used by Playwright teardown)
+  app.delete('/api/sessions/test-cleanup', (_req, res) => {
+    const { getAllSessions, removeSession } = require('./state/sessions');
+    const testSessions = getAllSessions().filter((s: any) => s.id.startsWith('test-'));
+    for (const s of testSessions) {
+      removeSession(s.id);
+      broadcast('session-removed', { sessionId: s.id });
+    }
+    res.json({ removed: testSessions.length });
+  });
+
+  // API: get transcript for a session
+  app.get('/api/sessions/:id/transcript', (req, res) => {
+    const session = getSession(req.params.id);
+    if (!session) {
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+    if (!session.transcriptPath) {
+      res.json({ messages: [], status: 'no_transcript_path' });
+      return;
+    }
+    const messages = readTranscript(session.transcriptPath);
+    res.json({ messages, transcriptPath: session.transcriptPath });
+  });
+
+  // B007: API: get token usage for a session
+  app.get('/api/sessions/:id/usage', (req, res) => {
+    const session = getSession(req.params.id);
+    if (!session) {
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+    if (!session.transcriptPath) {
+      res.json({ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, totalTokens: 0, estimatedCostUSD: 0 });
+      return;
+    }
+    const usage = readUsageFromTranscript(session.transcriptPath);
+    res.json(usage);
+  });
+
+  // B007: API: get aggregate usage across all sessions
+  app.get('/api/usage', (_req, res) => {
+    const { getAllSessions } = require('./state/sessions');
+    const allSessions = getAllSessions();
+    let totalInput = 0, totalOutput = 0, totalCacheRead = 0, totalCost = 0;
+    for (const s of allSessions) {
+      if (s.transcriptPath) {
+        const u = readUsageFromTranscript(s.transcriptPath);
+        totalInput += u.inputTokens;
+        totalOutput += u.outputTokens;
+        totalCacheRead += u.cacheReadTokens;
+        totalCost += u.estimatedCostUSD;
+      }
+    }
+    const totalTokens = totalInput + totalOutput + totalCacheRead;
+    res.json({ totalTokens, totalInput, totalOutput, totalCacheRead, estimatedCostUSD: totalCost });
+  });
+
+  // API: focus terminal window for a session
+  app.post('/api/sessions/:id/focus', (req, res) => {
+    const session = getSession(req.params.id);
+    if (!session) {
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+    focusTerminalWindow(session.terminalPid, session.name);
+    res.json({ ok: true });
   });
 
   // Socket.io handler

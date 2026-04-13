@@ -107,19 +107,19 @@
   <div class="logo"><span class="logo-dot">&#9679;</span> Command Centre</div>
   <div class="metrics-group">
     <div class="metric">
-      <div class="metric-value green" id="metricActive">0</div>
+      <div class="metric-value green" id="metricActive">4</div>
       <div class="metric-label">Active</div>
     </div>
     <div class="metric">
-      <div class="metric-value amber" id="metricAttention">0</div>
+      <div class="metric-value amber" id="metricAttention">1</div>
       <div class="metric-label">Attention</div>
     </div>
     <div class="metric">
-      <div class="metric-value blue" id="metricTokens">0</div>
+      <div class="metric-value blue" id="metricTokens">127.4k</div>
       <div class="metric-label">Tokens</div>
     </div>
     <div class="metric">
-      <div class="metric-value" id="metricCost">$0.00</div>
+      <div class="metric-value" id="metricCost">$2.18</div>
       <div class="metric-label">Cost</div>
     </div>
   </div>
@@ -163,21 +163,6 @@
     <!-- Session Grid/List -->
     <div class="grid-view" id="sessionGrid"></div>
 
-    <!-- Transcript Panel (shown when session selected) -->
-    <div class="transcript-panel" id="transcriptPanel" style="display:none">
-      <div class="transcript-focus-bar" id="transcriptFocusBar" onclick="focusSessionTerminal()">
-        <span>&#8599; Open in Terminal</span>
-        <span class="transcript-focus-hint">Click anywhere in transcript to switch to CLI</span>
-      </div>
-      <div class="transcript-body" id="transcriptBody" onclick="focusSessionTerminal()">
-        <div class="transcript-loading">Loading transcript...</div>
-      </div>
-      <div class="transcript-input-bar" id="transcriptInputBar" style="display:none">
-        <textarea class="transcript-input" id="transcriptInput" placeholder="Type a message..." rows="1" disabled></textarea>
-        <button class="transcript-send-btn" id="transcriptSendBtn" onclick="sendSessionMessage()" disabled title="Send message">&#8593;</button>
-      </div>
-    </div>
-
     <!-- Activity Feed -->
     <div class="resize-handle-horizontal" id="feedResizeHandle"></div>
     <div class="activity-feed" id="activityFeed">
@@ -190,7 +175,13 @@
   </div>
 </div>
 
-<script src="/socket.io/socket.io.js"></script>
+<!-- Mobile Tab Bar (B008) -->
+<div class="mobile-tabs">
+  <button class="mobile-tab active"><span class="mobile-tab-icon">&#9638;</span>Sessions</button>
+  <button class="mobile-tab"><span class="mobile-tab-icon">&#9776;</span>Activity</button>
+  <button class="mobile-tab"><span class="mobile-tab-icon">&#9881;</span>Settings</button>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>

@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Command Centre — Direction 1: Mission Control</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg-base: #09090b;
+  --bg-card: #111113;
+  --bg-card-hover: #1a1a1d;
+  --bg-elevated: #1e1e21;
+  --border: #27272a;
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --blue: #3b82f6;
+  --blue-dim: rgba(59,130,246,0.15);
+  --amber: #f59e0b;
+  --amber-dim: rgba(245,158,11,0.15);
+  --green: #10b981;
+  --green-dim: rgba(16,185,129,0.15);
+  --rose: #f43f5e;
+  --rose-dim: rgba(244,63,94,0.15);
+}
+body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-base); color: var(--text-primary); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+/* Top Metrics Bar */
+.metrics-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 24px; border-bottom: 1px solid var(--border);
+  background: var(--bg-card); flex-shrink: 0;
+}
+.metrics-bar .logo { font-weight: 700; font-size: 14px; letter-spacing: -0.5px; display: flex; align-items: center; gap: 8px; }
+.metrics-bar .logo span { color: var(--blue); }
+.metrics-group { display: flex; gap: 32px; }
+.metric { display: flex; flex-direction: column; align-items: center; }
+.metric-value { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.metric-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+.metric-value.green { color: var(--green); }
+.metric-value.amber { color: var(--amber); }
+.metric-value.blue { color: var(--blue); }
+.top-actions { display: flex; gap: 8px; }
+.btn { padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary); font-size: 12px; font-family: inherit; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.15s; }
+.btn:hover { background: var(--bg-card-hover); border-color: #3f3f46; }
+.btn-primary { background: var(--blue); border-color: var(--blue); color: white; }
+.btn-primary:hover { background: #2563eb; }
+.kbd { background: var(--bg-base); border: 1px solid var(--border); border-radius: 3px; padding: 1px 5px; font-size: 10px; font-family: 'JetBrains Mono', monospace; color: var(--text-muted); }
+
+/* Main Layout */
+.main { display: flex; flex: 1; overflow: hidden; }
+
+/* Sidebar */
+.sidebar {
+  width: 260px; border-right: 1px solid var(--border); background: var(--bg-card);
+  display: flex; flex-direction: column; flex-shrink: 0;
+}
+.sidebar-header { padding: 16px; border-bottom: 1px solid var(--border); }
+.sidebar-header h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); font-weight: 500; }
+.session-list { flex: 1; overflow-y: auto; padding: 8px; }
+.session-item {
+  padding: 10px 12px; border-radius: 8px; cursor: pointer; margin-bottom: 4px;
+  transition: background 0.15s; display: flex; align-items: center; gap: 10px;
+}
+.session-item:hover { background: var(--bg-card-hover); }
+.session-item.active { background: var(--blue-dim); border: 1px solid rgba(59,130,246,0.3); }
+.session-item.needs-attention { background: var(--amber-dim); border: 1px solid rgba(245,158,11,0.3); }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.status-dot.active { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 2s infinite; }
+.status-dot.waiting { background: var(--amber); box-shadow: 0 0 6px var(--amber); animation: pulse 1s infinite; }
+.status-dot.error { background: var(--rose); box-shadow: 0 0 6px var(--rose); }
+.status-dot.completed { background: var(--text-muted); }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+.session-info { flex: 1; min-width: 0; }
+.session-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.session-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; display: flex; gap: 8px; }
+
+/* Content Area */
+.content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.content-header { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.view-toggle { display: flex; background: var(--bg-base); border-radius: 6px; border: 1px solid var(--border); overflow: hidden; }
+.view-toggle button { padding: 6px 12px; background: transparent; border: none; color: var(--text-muted); font-size: 12px; cursor: pointer; font-family: inherit; }
+.view-toggle button.active { background: var(--bg-card-hover); color: var(--text-primary); }
+
+/* Grid View */
+.grid-view { flex: 1; padding: 24px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; align-content: start; }
+.session-card {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 20px; transition: all 0.2s; cursor: pointer; position: relative; overflow: hidden;
+}
+.session-card:hover { border-color: #3f3f46; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+.session-card.needs-attention { border-color: var(--amber); }
+.session-card.needs-attention::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--amber);
+}
+.card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+.card-title { display: flex; align-items: center; gap: 8px; }
+.card-title h3 { font-size: 14px; font-weight: 600; }
+.status-badge { padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+.status-badge.active { background: var(--green-dim); color: var(--green); }
+.status-badge.waiting { background: var(--amber-dim); color: var(--amber); }
+.status-badge.error { background: var(--rose-dim); color: var(--rose); }
+.status-badge.completed { background: rgba(113,113,122,0.15); color: var(--text-muted); }
+.card-project { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; font-family: 'JetBrains Mono', monospace; }
+.card-activity { font-size: 12px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.5; }
+.card-activity code { font-family: 'JetBrains Mono', monospace; background: var(--bg-base); padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+.card-footer { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; border-top: 1px solid var(--border); }
+.card-stats { display: flex; gap: 16px; font-size: 11px; color: var(--text-muted); }
+.card-stats span { display: flex; align-items: center; gap: 4px; }
+.card-time { font-variant-numeric: tabular-nums; }
+
+/* Permission Alert */
+.permission-bar {
+  background: var(--amber-dim); border: 1px solid rgba(245,158,11,0.3);
+  border-radius: 10px; padding: 14px 20px; margin: 16px 24px 0;
+  display: flex; align-items: center; justify-content: space-between;
+  animation: slideDown 0.3s ease-out;
+}
+@keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+.permission-info { display: flex; align-items: center; gap: 12px; }
+.permission-icon { width: 32px; height: 32px; background: var(--amber-dim); border: 1px solid var(--amber); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.permission-text h4 { font-size: 13px; font-weight: 600; color: var(--amber); }
+.permission-text p { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.permission-text code { font-family: 'JetBrains Mono', monospace; font-size: 11px; background: rgba(0,0,0,0.3); padding: 1px 5px; border-radius: 3px; }
+.permission-actions { display: flex; gap: 8px; }
+.btn-approve { background: var(--green); border-color: var(--green); color: white; font-weight: 500; }
+.btn-approve:hover { background: #059669; }
+.btn-deny { background: var(--rose-dim); border-color: var(--rose); color: var(--rose); font-weight: 500; }
+.btn-deny:hover { background: rgba(244,63,94,0.25); }
+
+/* Activity Feed (bottom) */
+.activity-feed {
+  border-top: 1px solid var(--border); background: var(--bg-card);
+  max-height: 180px; overflow-y: auto; flex-shrink: 0;
+}
+.feed-header { padding: 8px 24px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg-card); }
+.feed-item { padding: 6px 24px; display: flex; align-items: center; gap: 12px; font-size: 12px; border-bottom: 1px solid rgba(39,39,42,0.5); }
+.feed-item:hover { background: var(--bg-card-hover); }
+.feed-time { color: var(--text-muted); font-family: 'JetBrains Mono', monospace; font-size: 11px; width: 60px; flex-shrink: 0; }
+.feed-session { color: var(--blue); font-weight: 500; width: 120px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.feed-event { color: var(--text-secondary); flex: 1; }
+.feed-event code { font-family: 'JetBrains Mono', monospace; font-size: 11px; background: var(--bg-base); padding: 1px 4px; border-radius: 3px; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #27272a; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+</style>
+</head>
+<body>
+
+<!-- Top Metrics Bar -->
+<div class="metrics-bar">
+  <div class="logo"><span>&#9679;</span> Command Centre</div>
+  <div class="metrics-group">
+    <div class="metric">
+      <div class="metric-value green">4</div>
+      <div class="metric-label">Active Sessions</div>
+    </div>
+    <div class="metric">
+      <div class="metric-value amber">1</div>
+      <div class="metric-label">Needs Attention</div>
+    </div>
+    <div class="metric">
+      <div class="metric-value blue">127.4k</div>
+      <div class="metric-label">Tokens Used</div>
+    </div>
+    <div class="metric">
+      <div class="metric-value">$2.18</div>
+      <div class="metric-label">Session Cost</div>
+    </div>
+  </div>
+  <div class="top-actions">
+    <button class="btn"><span class="kbd">Ctrl K</span> Command</button>
+    <button class="btn btn-primary">+ New Session</button>
+  </div>
+</div>
+
+<!-- Main Layout -->
+<div class="main">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header"><h3>Sessions</h3></div>
+    <div class="session-list">
+      <div class="session-item needs-attention" onclick="highlightCard('auth')">
+        <div class="status-dot waiting"></div>
+        <div class="session-info">
+          <div class="session-name">Auth Refactor</div>
+          <div class="session-meta"><span>Permission needed</span><span>12m</span></div>
+        </div>
+      </div>
+      <div class="session-item active" onclick="highlightCard('ooh')">
+        <div class="status-dot active"></div>
+        <div class="session-info">
+          <div class="session-name">OOH Dashboard</div>
+          <div class="session-meta"><span>Editing files</span><span>34m</span></div>
+        </div>
+      </div>
+      <div class="session-item" onclick="highlightCard('zendesk')">
+        <div class="status-dot active"></div>
+        <div class="session-info">
+          <div class="session-name">Zendesk Integration</div>
+          <div class="session-meta"><span>Running tests</span><span>1h 12m</span></div>
+        </div>
+      </div>
+      <div class="session-item" onclick="highlightCard('iot')">
+        <div class="status-dot active"></div>
+        <div class="session-info">
+          <div class="session-name">IOT Admin Panel</div>
+          <div class="session-meta"><span>Reading files</span><span>8m</span></div>
+        </div>
+      </div>
+      <div class="session-item">
+        <div class="status-dot completed"></div>
+        <div class="session-info">
+          <div class="session-name">Holiday Tracker Fix</div>
+          <div class="session-meta"><span>Completed</span><span>45m ago</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="content">
+    <div class="content-header">
+      <div style="font-size:14px;font-weight:600;">All Sessions</div>
+      <div class="view-toggle">
+        <button class="active">Grid</button>
+        <button>List</button>
+        <button>Timeline</button>
+      </div>
+    </div>
+
+    <!-- Permission Alert -->
+    <div class="permission-bar">
+      <div class="permission-info">
+        <div class="permission-icon">&#9888;</div>
+        <div class="permission-text">
+          <h4>Auth Refactor needs permission</h4>
+          <p>Bash: <code>npm run test -- --coverage</code></p>
+        </div>
+      </div>
+      <div class="permission-actions">
+        <button class="btn btn-deny">Deny <span class="kbd">D</span></button>
+        <button class="btn btn-approve">Approve <span class="kbd">A</span></button>
+      </div>
+    </div>
+
+    <!-- Grid View -->
+    <div class="grid-view">
+      <div class="session-card needs-attention" id="card-auth">
+        <div class="card-header">
+          <div class="card-title">
+            <div class="status-dot waiting"></div>
+            <h3>Auth Refactor</h3>
+          </div>
+          <div class="status-badge waiting">Waiting</div>
+        </div>
+        <div class="card-project">Work/ITSM/auth-service/</div>
+        <div class="card-activity">
+          Requesting permission to run <code>npm run test -- --coverage</code> in project directory. 3 files edited so far.
+        </div>
+        <div class="card-footer">
+          <div class="card-stats">
+            <span>&#128196; 3 files</span>
+            <span>&#9881; 12 tools</span>
+            <span>24.1k tokens</span>
+          </div>
+          <div class="card-time">12m</div>
+        </div>
+      </div>
+
+      <div class="session-card" id="card-ooh">
+        <div class="card-header">
+          <div class="card-title">
+            <div class="status-dot active"></div>
+            <h3>OOH Dashboard</h3>
+          </div>
+          <div class="status-badge active">Active</div>
+        </div>
+        <div class="card-project">Work/Zendesk Integration/OOH Dashboard/</div>
+        <div class="card-activity">
+          Editing <code>src/Components/Dashboard.razor</code> — adding Thingsboard data binding for temperature widget.
+        </div>
+        <div class="card-footer">
+          <div class="card-stats">
+            <span>&#128196; 7 files</span>
+            <span>&#9881; 28 tools</span>
+            <span>52.3k tokens</span>
+          </div>
+          <div class="card-time">34m</div>
+        </div>
+      </div>
+
+      <div class="session-card" id="card-zendesk">
+        <div class="card-header">
+          <div class="card-title">
+            <div class="status-dot active"></div>
+            <h3>Zendesk Integration</h3>
+          </div>
+          <div class="status-badge active">Active</div>
+        </div>
+        <div class="card-project">Work/Zendesk Integration/</div>
+        <div class="card-activity">
+          Running Playwright tests — 14/18 passing. Investigating failure in <code>ticket-creation.spec.ts</code>.
+        </div>
+        <div class="card-footer">
+          <div class="card-stats">
+            <span>&#128196; 2 files</span>
+            <span>&#9881; 41 tools</span>
+            <span>38.7k tokens</span>
+          </div>
+          <div class="card-time">1h 12m</div>
+        </div>
+      </div>
+
+      <div class="session-card" id="card-iot">
+        <div class="card-header">
+          <div class="card-title">
+            <div class="status-dot active"></div>
+            <h3>IOT Admin Panel</h3>
+          </div>
+          <div class="status-badge active">Active</div>
+        </div>
+        <div class="card-project">Work/IOT Admin/</div>
+        <div class="card-activity">
+          Reading <code>ARCHITECTURE.md</code> and existing service files. Analysing current device registration flow.
+        </div>
+        <div class="card-footer">
+          <div class="card-stats">
+            <span>&#128196; 0 files</span>
+            <span>&#9881; 6 tools</span>
+            <span>12.3k tokens</span>
+          </div>
+          <div class="card-time">8m</div>
+        </div>
+      </div>
+
+      <div class="session-card" style="opacity: 0.6;">
+        <div class="card-header">
+          <div class="card-title">
+            <div class="status-dot completed"></div>
+            <h3>Holiday Tracker Fix</h3>
+          </div>
+          <div class="status-badge completed">Completed</div>
+        </div>
+        <div class="card-project">Work/General/holiday-tracker/</div>
+        <div class="card-activity">
+          Fixed date validation bug in leave request form. Committed and pushed to GitHub. All 12 tests passing.
+        </div>
+        <div class="card-footer">
+          <div class="card-stats">
+            <span>&#128196; 2 files</span>
+            <span>&#9881; 19 tools</span>
+            <span>18.2k tokens</span>
+          </div>
+          <div class="card-time">45m ago</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Activity Feed -->
+    <div class="activity-feed">
+      <div class="feed-header">Activity Feed</div>
+      <div class="feed-item">
+        <span class="feed-time">14:32</span>
+        <span class="feed-session">Auth Refactor</span>
+        <span class="feed-event">&#9888; Permission requested: <code>Bash(npm run test -- --coverage)</code></span>
+      </div>
+      <div class="feed-item">
+        <span class="feed-time">14:31</span>
+        <span class="feed-session">OOH Dashboard</span>
+        <span class="feed-event">Edit: <code>src/Components/Dashboard.razor</code> (added temperature binding)</span>
+      </div>
+      <div class="feed-item">
+        <span class="feed-time">14:30</span>
+        <span class="feed-session">Zendesk</span>
+        <span class="feed-event">Bash: <code>npx playwright test --reporter=list</code></span>
+      </div>
+      <div class="feed-item">
+        <span class="feed-time">14:29</span>
+        <span class="feed-session">IOT Admin</span>
+        <span class="feed-event">Read: <code>ARCHITECTURE.md</code> (142 lines)</span>
+      </div>
+      <div class="feed-item">
+        <span class="feed-time">14:28</span>
+        <span class="feed-session">OOH Dashboard</span>
+        <span class="feed-event">Read: <code>src/Services/ThingsboardService.cs</code></span>
+      </div>
+      <div class="feed-item">
+        <span class="feed-time">14:25</span>
+        <span class="feed-session">Auth Refactor</span>
+        <span class="feed-event">Edit: <code>src/Middleware/AuthMiddleware.cs</code> (refactored token validation)</span>
+      </div>
+      <div class="feed-item">
+        <span class="feed-time">14:22</span>
+        <span class="feed-session">Holiday Tracker</span>
+        <span class="feed-event" style="color:var(--green);">&#10003; Session completed — 2 files changed, all tests passing</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function highlightCard(id) {
+  document.querySelectorAll('.session-card').forEach(c => c.style.outline = 'none');
+  const card = document.getElementById('card-' + id);
+  if (card) { card.style.outline = '2px solid var(--blue)'; card.style.outlineOffset = '2px'; card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+}
+</script>
+</body>
+</html>

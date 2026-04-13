@@ -1,70 +1,50 @@
 # Command Centre — Product Backlog
 
-**Last Updated:** 2026-04-12
+**Last Updated:** 2026-04-13
 **Referenced by:** PROJECT_STATUS.md, feature-list.json
 
 ---
 
-## Release 0.1.0 — MVP (Current Build)
+## Priority Backlog (Design Scope)
 
-Features from `feature-list.json`. Status tracked there.
+Items 1-9 are the current design/build scope. Items 2+3 were merged (F005/F015 are the same work).
 
-| ID | Feature | Priority | Status | Notes |
-|----|---------|----------|--------|-------|
-| F001 | Session dashboard with real-time status | Critical | Built, needs live verification | Core value prop |
-| F002 | Desktop toast notifications | Critical | Built, needs live verification | node-notifier |
-| F003 | Approve/deny permissions from dashboard | Critical | Built, needs live verification | HTTP hook bidirectional |
-| F004 | Session naming and labelling | High | Built, needs live verification | Derived from cwd |
-| F005 | Launch new sessions from dashboard | Medium | Built, needs redesign | Must go through launcher, not raw `claude` |
-| F006 | Event receiver server | Critical | Built, verified | Express + Socket.io |
-| F007 | Activity feed | Medium | Built, needs live verification | Bottom panel |
-| F008 | Cost/token tracking | Low | Not built | Token data may not be in hook payloads |
-| F009 | Hook validation | Critical | Complete | Bidirectional confirmed |
-| F010 | Settings integration (setup script) | Critical | Built, verified | Injects hooks into settings.json |
-| F011 | Portable config | High | Built, verified | Auto-creates config.json |
-| F012 | npm package with bin entry | Medium | Partial | package.json has bin, not published |
+| # | Feature | Batch | Details |
+|---|---------|-------|---------|
+| 1 | Launcher auto-starts CC server | A: Launcher | On launcher startup, hit `localhost:4111/healthz`. If down, spawn as background process. If up, skip. No more manual server start. |
+| 2 | New Session invokes launcher | A: Launcher | Merge of F005+F015. Redesign "New Session" to invoke the launcher instead of raw `claude`. Sessions get harness selection, MCP servers, CLAUDE.md context. Closes the launcher gap. |
+| 3 | Server process management | B: Server lifecycle | Keep CC server running persistently — auto-restart on crash, survive terminal closure. Windows service, pm2, or startup script. |
+| 4 | Graceful handling of server not running | B: Server lifecycle | Confirm Claude Code sessions work normally when CC is down. Hooks already fail silently — verify and tune timeouts. |
+| 5 | Session kill from dashboard | C: Session control | Kill button with confirmation dialog. Handle both dashboard-managed (child process) and terminal (PID lookup) sessions. |
+| 6 | Session pause/resume | C: Session control | Pause a running session to stop token consumption, resume later. May require Agent SDK — feasibility TBC during design. |
+| 7 | Cost/token tracking | Standalone | Per-session token count and USD cost on cards, aggregate summary bar. Needs research into hook payload or `~/.claude/` session file contents. |
+| 8 | Mobile-accessible dashboard | Standalone | Responsive CSS for phone/tablet. Expose beyond localhost via Tailscale. |
+| 9 | Drag-and-drop files to sessions | Standalone | Drag files onto a session card to inject into context. Open question: attachment, copy to working dir, or path reference? Dashboard-managed only initially. |
 
-### Known Issues (Current Build)
+**Build order:** Batch A (1, 2) -> Batch B (3, 4) -> Batch C (5, 6) -> 7, 8, 9 in any order
 
-1. **Server process lifecycle** — No mechanism to keep server running persistently. User must manually start in a terminal. Needs launcher integration.
+**Testing note:** Scroll-lock regression (F037) — code fix is in place, verify opportunistically during any live permission testing. Not a build task.
+
+**Release task:** Transferability/distribution (F036) — comes after features stabilise. Sub-tasks: **a)** GitHub repo (F022) **b)** npm package bin entry (F012) **c)** npm publish for `npx` (F021). Not in design scope.
+
+---
+
+## Not Yet Prioritised
+
+| # | Feature | Previous ID | Details |
+|---|---------|-------------|---------|
+| A | Launcher passes `--name` to sessions | F014 | Pass a `--name` flag when spawning sessions so the dashboard shows meaningful names instead of folder paths. |
+| B | Send text input to terminal sessions | F018 | F029 solved input for dashboard-managed sessions. This extends it to hook-monitored terminal sessions via Agent SDK or stdin pipe. |
+| C | Session history persistence | F024 | Persist sessions, transcripts, and events to disk (JSON/SQLite) so data survives server restarts. |
+| D | Happy Coder compatibility | F025 | Verify HTTP hooks fire correctly through the `happy` wrapper. Ensure events, permissions, and text input all work. |
+
+---
+
+## Known Issues (Current Build)
+
+1. **Server process lifecycle** — No mechanism to keep server running persistently. User must manually start in a terminal. (Addressed by item 3)
 2. **Pre-existing sessions invisible** — Sessions started before hooks were injected don't appear. Fundamental limitation of hook injection timing.
-3. **Session names derived from folder only** — `--name` flag from Claude Code may not be in hook payload. Need to verify.
-4. **No text input to sessions** — Can only approve/deny, cannot send arbitrary text. Major gap for true command centre use.
-5. **Dashboard frontend untested end-to-end** — Server verified, frontend wired but needs live verification of rendering, Socket.io events, interactions.
-
----
-
-## Release 0.2.0 — Launcher Integration
-
-| ID | Feature | Priority | Notes |
-|----|---------|----------|-------|
-| F013 | Launcher auto-starts Command Centre server | Critical | Health check `localhost:4111/healthz` on launcher startup. If down, spawn server in background. If up, skip. |
-| F014 | Launcher passes `--name` to Claude sessions | High | So dashboard shows meaningful names, not just folder names |
-| F015 | Dashboard "New Session" invokes launcher | High | Not raw `claude`. Opens PowerShell → runs launcher. Launcher handles project selection, MCP config, harness, etc. |
-| F016 | Server process management | High | Auto-restart on crash? Windows service? Startup script? Needs design. |
-| F017 | Graceful handling of server not running | Medium | Claude Code sessions should work normally if server is down. Hooks fail silently (already the case). |
-
----
-
-## Release 0.3.0 — Text Input & Session Control
-
-| ID | Feature | Priority | Notes |
-|----|---------|----------|-------|
-| F018 | Send text input to sessions from dashboard | Critical | Requires architectural change — Agent SDK or stdin pipe. Design needed. |
-| F019 | Session pause/resume from dashboard | Medium | May require Agent SDK |
-| F020 | Session kill from dashboard | Low | Process termination — safety implications |
-
----
-
-## Release 0.4.0 — Polish & Distribution
-
-| ID | Feature | Priority | Notes |
-|----|---------|----------|-------|
-| F021 | npm publish for `npx` usage | Medium | Package name availability check needed |
-| F022 | GitHub repo (public/shareable) | High | Under bigtuff8 org or personal? |
-| F023 | Cost/token tracking (F008 deferred) | Low | Depends on hook payload content |
-| F024 | Session history persistence | Low | Currently in-memory only, lost on restart |
-| F025 | Happy Coder compatibility testing | Low | Verify hooks fire through `happy` wrapper |
+3. **Session names derived from folder only** — `--name` flag from Claude Code may not be in hook payload. (Related to unprioritised item A)
 
 ---
 
@@ -74,6 +54,29 @@ Features from `feature-list.json`. Status tracked there.
 - Session grouping by project/workspace
 - Cross-session diff viewer (files changed across all sessions)
 - Integration with launcher's approval-reviewer (consolidate approval pipelines)
-- Mobile-responsive dashboard for tablet use
 - Dark/light theme toggle
 - Session replay (view historical session activity)
+
+---
+
+## Completed (17 features)
+
+| ID | Feature | Completed |
+|----|---------|-----------|
+| F001 | Session dashboard with real-time status | 2026-04-12 |
+| F002 | Desktop toast notifications | 2026-04-12 |
+| F003 | Approve/deny permissions from dashboard | 2026-04-12 |
+| F004 | Session naming and labelling | 2026-04-12 |
+| F006 | Event receiver server | 2026-04-12 |
+| F007 | Activity feed | 2026-04-12 |
+| F009 | Hook validation | 2026-04-12 |
+| F010 | Settings integration (setup script) | 2026-04-12 |
+| F011 | Portable config | 2026-04-12 |
+| F026 | Clickable toast notifications open dashboard | 2026-04-12 |
+| F027 | Dismiss/remove completed sessions | 2026-04-12 |
+| F028 | Session transcript panel | 2026-04-12 |
+| F029 | Text input to sessions (CLI stream-json) | 2026-04-13 |
+| F030 | Click-to-terminal focus | 2026-04-12 |
+| F031 | Transcript scroll-lock (incremental append) | 2026-04-12 |
+| F032 | Rename/label sessions from dashboard | 2026-04-12 |
+| F033 | Show session start time on cards | 2026-04-12 |

@@ -1,10 +1,13 @@
 import { AppConfig } from '../types';
+import { exec } from 'child_process';
 
 let config: AppConfig;
 let notifier: any;
+let dashboardUrl: string;
 
 export function initNotifications(appConfig: AppConfig): void {
   config = appConfig;
+  dashboardUrl = `http://localhost:${config.port}`;
   if (config.notifications.enabled) {
     try {
       notifier = require('node-notifier');
@@ -12,6 +15,10 @@ export function initNotifications(appConfig: AppConfig): void {
       console.warn('node-notifier not available — desktop notifications disabled.');
     }
   }
+}
+
+function openDashboard(): void {
+  exec(`start "" "${dashboardUrl}"`, { windowsHide: true });
 }
 
 export function notifyPermissionRequest(sessionName: string, toolName: string, toolInput: Record<string, any>): void {
@@ -23,8 +30,10 @@ export function notifyPermissionRequest(sessionName: string, toolName: string, t
     title: `${sessionName} needs permission`,
     message: `${toolName}: ${inputSummary}`,
     sound: config.notifications.sound,
-    wait: false,
+    wait: true,
     appID: 'Command Centre',
+  }, (_err: any, response: string) => {
+    if (response === 'activate') openDashboard();
   });
 }
 
@@ -35,8 +44,10 @@ export function notifySessionComplete(sessionName: string): void {
     title: 'Session completed',
     message: sessionName,
     sound: false,
-    wait: false,
+    wait: true,
     appID: 'Command Centre',
+  }, (_err: any, response: string) => {
+    if (response === 'activate') openDashboard();
   });
 }
 
@@ -47,8 +58,10 @@ export function notifyError(sessionName: string, detail: string): void {
     title: `${sessionName} error`,
     message: detail,
     sound: config.notifications.sound,
-    wait: false,
+    wait: true,
     appID: 'Command Centre',
+  }, (_err: any, response: string) => {
+    if (response === 'activate') openDashboard();
   });
 }
 

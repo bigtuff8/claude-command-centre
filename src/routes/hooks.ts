@@ -20,7 +20,15 @@ export function createHooksRouter(broadcast: (event: string, data: any) => void)
 
 function handleSessionStart(req: Request, res: Response): void {
   const payload: HookPayload = req.body;
+  console.log('[SessionStart] Payload keys:', Object.keys(payload).join(', '));
   const session = getOrCreateSession(payload.session_id, payload.cwd, payload.permission_mode);
+
+  // Capture transcript path — from payload or derive from session_id
+  if (payload.transcript_path) {
+    session.transcriptPath = payload.transcript_path;
+  } else if (payload.session_id && payload.cwd) {
+    session.transcriptPath = deriveTranscriptPath(payload.session_id, payload.cwd);
+  }
 
   const event = {
     timestamp: new Date(),
@@ -111,6 +119,15 @@ async function handlePreToolUse(req: Request, res: Response): Promise<void> {
   addFeedEvent(feedEvent);
   broadcastFn('feed-event', feedEvent);
 
+  // Capture transcript path — from payload or derive
+  if (!session.transcriptPath) {
+    if (payload.transcript_path) {
+      session.transcriptPath = payload.transcript_path;
+    } else if (payload.session_id && payload.cwd) {
+      session.transcriptPath = deriveTranscriptPath(payload.session_id, payload.cwd);
+    }
+  }
+
   // Auto-pass tools that don't need permission prompting
   if (isAutoPassTool(toolName, session.permissionMode)) {
     broadcastFn('session-updated', sessionToDTO(session));
@@ -118,10 +135,31 @@ async function handlePreToolUse(req: Request, res: Response): Promise<void> {
     return;
   }
 
+  // B006: Auto-decline permissions when session is on hold
+  if (session.status === 'held') {
+    console.log(`[Permission] Auto-declined (session on hold): ${session.name} → ${toolName}`);
+    res.json({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'deny',
+        permissionDecisionReason: 'Session paused via Command Centre dashboard',
+      },
+    });
+    return;
+  }
+
   // Hold the request and wait for dashboard response
   console.log(`[Permission] ${session.name} requesting: ${toolName}(${getToolDetail(toolName, toolInput)})`);
 
   notifyPermissionRequest(session.name, toolName, toolInput);
+
+  // IMPORTANT: createPermissionRequest must be called BEFORE broadcasting session-updated,
+  // because it sets session.pendingPermission and session.status = 'waiting'.
+  // If we broadcast session-updated first, the DTO has pendingPermission: null,
+  // which clobbers the client-side state set by the permission-requested event.
+  const permissionPromise = createPermissionRequest(session, toolName, toolInput, toolUseId);
+
+  // Now session.pendingPermission is set — safe to broadcast
   broadcastFn('permission-requested', {
     sessionId: session.id,
     sessionName: session.name,
@@ -131,7 +169,7 @@ async function handlePreToolUse(req: Request, res: Response): Promise<void> {
   });
   broadcastFn('session-updated', sessionToDTO(session));
 
-  const response = await createPermissionRequest(session, toolName, toolInput, toolUseId);
+  const response = await permissionPromise;
   broadcastFn('session-updated', sessionToDTO(session));
   res.json(response);
 }
@@ -141,6 +179,14 @@ function handlePostToolUse(req: Request, res: Response): void {
   const session = getOrCreateSession(payload.session_id, payload.cwd);
   const toolName = payload.tool_name || 'Unknown';
   const toolInput = payload.tool_input || {};
+
+  if (!session.transcriptPath) {
+    if (payload.transcript_path) {
+      session.transcriptPath = payload.transcript_path;
+    } else if (payload.session_id && payload.cwd) {
+      session.transcriptPath = deriveTranscriptPath(payload.session_id, payload.cwd);
+    }
+  }
 
   session.toolCount++;
   session.lastActivity = new Date();
@@ -174,6 +220,35 @@ function handlePostToolUse(req: Request, res: Response): void {
   broadcastFn('feed-event', feedEvent);
 
   res.json({});
+}
+
+function deriveTranscriptPath(sessionId: string, cwd: string): string | null {
+  const fs = require('fs');
+  const path = require('path');
+  const home = process.env.HOME || process.env.USERPROFILE || '';
+
+  // Claude Code stores transcripts at: ~/.claude/projects/{encoded-cwd}/{session-id}.jsonl
+  // The encoded cwd replaces path separators and colons with dashes
+  const encoded = cwd.replace(/[:\\\/]/g, '-').replace(/^-+/, '');
+  const transcriptPath = path.join(home, '.claude', 'projects', encoded, sessionId + '.jsonl');
+
+  if (fs.existsSync(transcriptPath)) {
+    return transcriptPath;
+  }
+
+  // Try finding the file by scanning project directories
+  const projectsDir = path.join(home, '.claude', 'projects');
+  if (fs.existsSync(projectsDir)) {
+    const dirs = fs.readdirSync(projectsDir);
+    for (const dir of dirs) {
+      const candidate = path.join(projectsDir, dir, sessionId + '.jsonl');
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
+  return null;
 }
 
 function getToolDetail(toolName: string, toolInput: Record<string, any>): string {

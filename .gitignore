@@ -1,4 +1,8 @@
 node_modules/
 dist/
+config.json
 config.local.json
 *.log
+logs/
+test-results/
+.env

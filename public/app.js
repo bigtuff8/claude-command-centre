@@ -7,6 +7,10 @@ let feedEvents = [];
 let selectedSessionId = null;
 let feedCollapsed = false;
 let currentView = 'grid';
+let transcriptMessages = [];
+let transcriptAutoScroll = true;
+let transcriptLoaded = false;
+let sessionThinking = {}; // sessionId -> boolean
 
 // === SOCKET EVENT HANDLERS ===
 socket.on('connect', () => {
@@ -79,12 +83,45 @@ socket.on('permission-resolved', (data) => {
   }
 });
 
+socket.on('session-removed', (data) => {
+  sessions = sessions.filter(s => s.id !== data.sessionId);
+  if (selectedSessionId === data.sessionId) selectedSessionId = null;
+  renderAll();
+});
+
+socket.on('transcript-update', (data) => {
+  if (data.sessionId === selectedSessionId && data.messages) {
+    transcriptMessages = transcriptMessages.concat(data.messages);
+    renderTranscript();
+  }
+});
+
+socket.on('transcript-error', (data) => {
+  console.log('[CC] transcript-error:', data.message);
+});
+
 socket.on('permission-timeout', (data) => {
   const session = sessions.find(s => s.id === data.sessionId);
   if (session && session.pendingPermission) {
     session.pendingPermission = null;
     showToast('warning', 'Permission timed out for ' + escapeHtml(session.name));
     renderAll();
+  }
+});
+
+// SDK session output — streaming messages from dashboard-managed sessions
+socket.on('session-output', (data) => {
+  if (data.sessionId === selectedSessionId && data.message) {
+    transcriptMessages.push(data.message);
+    renderTranscript();
+  }
+});
+
+socket.on('session-thinking', (data) => {
+  sessionThinking[data.sessionId] = data.thinking;
+  updateInputBar();
+  if (data.sessionId === selectedSessionId) {
+    renderTranscript();
   }
 });
 
@@ -98,6 +135,35 @@ function escapeHtml(str) {
 
 function capitalize(s) {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function badgeText(status) {
+  const map = { waiting: 'Permission', held: 'On Hold', stopped: 'Stopped' };
+  return map[status] || capitalize(status);
+}
+
+function isSessionWorking(session) {
+  if (session.status !== 'active') return false;
+  if (!session.lastActivity) return false;
+  var elapsed = Date.now() - new Date(session.lastActivity).getTime();
+  return elapsed < 15000; // active within last 15 seconds
+}
+
+function renderMarkdown(text) {
+  if (!text) return '';
+  // Escape HTML first, then apply markdown formatting
+  let html = escapeHtml(text);
+  // Code blocks (``` ... ```)
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="msg-codeblock"><code>$2</code></pre>');
+  // Inline code
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // Bold
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  // Italic (single *)
+  html = html.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
+  // Line breaks
+  html = html.replace(/\n/g, '<br>');
+  return html;
 }
 
 function formatElapsed(isoString) {
@@ -164,6 +230,7 @@ function renderSidebar() {
   list.innerHTML = sessions.map(s => {
     const isSelected = s.id === selectedSessionId;
     const needsAttention = s.status === 'waiting';
+    const working = isSessionWorking(s);
     const elapsed = s.status === 'completed'
       ? formatElapsedForCompleted(s.lastActivity)
       : formatElapsed(s.startedAt);
@@ -172,10 +239,10 @@ function renderSidebar() {
       (isSelected ? ' selected' : '') +
       (needsAttention ? ' needs-attention' : '') +
       '" onclick="selectSession(\'' + s.id + '\')">' +
-      '<div class="status-dot ' + s.status + '"></div>' +
+      '<div class="status-dot ' + s.status + (working ? ' working' : '') + '"></div>' +
       '<div class="session-info">' +
-        '<div class="session-name">' + escapeHtml(s.name) + '</div>' +
-        '<div class="session-meta"><span>' + capitalize(s.status) + '</span><span>' + elapsed + '</span></div>' +
+        '<div class="session-name">' + escapeHtml(s.name) + (s.sessionType === 'sdk-managed' ? ' <span class="sdk-badge">&#9000;</span>' : '') + '</div>' +
+        '<div class="session-meta"><span>' + (working ? 'Working...' : capitalize(s.status)) + '</span><span>' + formatTime(s.startedAt) + '</span><span>' + elapsed + '</span></div>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -202,6 +269,7 @@ function renderGrid() {
     const needsAttention = s.status === 'waiting';
     const isCompleted = s.status === 'completed';
     const isSelected = s.id === selectedSessionId;
+    const working = isSessionWorking(s);
     const elapsed = isCompleted
       ? formatElapsedForCompleted(s.lastActivity)
       : formatElapsed(s.startedAt);
@@ -228,15 +296,22 @@ function renderGrid() {
       (needsAttention ? ' needs-attention' : '') +
       (isCompleted ? ' completed-card' : '') +
       (isSelected ? ' selected' : '') +
-      '" id="card-' + s.id + '" onclick="toggleCardDetail(\'' + s.id + '\')">' +
+      '" id="card-' + s.id + '" onclick="if(!event.target.closest(\'.session-name\'))selectSession(\'' + s.id + '\')">' +
       '<div class="card-header">' +
         '<div class="card-title">' +
-          '<div class="status-dot ' + s.status + '"></div>' +
-          '<h3>' + escapeHtml(s.name) + '</h3>' +
+          '<div class="status-dot ' + s.status + (working ? ' working' : '') + '"></div>' +
+          '<h3 class="session-name" ondblclick="event.stopPropagation(); startRename(\'' + s.id + '\', this)" title="Double-click to rename">' + escapeHtml(s.name) + '</h3>' +
         '</div>' +
-        '<div class="status-badge ' + s.status + '">' + capitalize(s.status) + '</div>' +
+        '<div class="card-header-actions">' +
+          ((isCompleted || s.status === 'errored' || s.status === 'stopped') ? '<button class="btn-dismiss" onclick="event.stopPropagation(); dismissSession(\'' + s.id + '\')" title="Remove session">&times;</button>' : '') +
+          (s.sessionType === 'sdk-managed' ? '<span class="sdk-badge" title="Dashboard-managed session">&#9000;</span>' : '') +
+          (working ? '<div class="working-badge">Working</div>' : '<div class="status-badge ' + s.status + '">' + badgeText(s.status) + '</div>') +
+          ((s.status === 'active' || s.status === 'waiting') ? '<button class="card-kill-btn" onclick="event.stopPropagation(); openKillModal(\'' + s.id + '\')" title="Stop session">&#9209;</button>' : '') +
+        '</div>' +
       '</div>' +
-      '<div class="card-project">' + escapeHtml(s.project) + '</div>' +
+      '<div class="card-project">' + escapeHtml(s.project) +
+        '<span class="card-started">Started ' + formatTime(s.startedAt) + '</span>' +
+      '</div>' +
       '<div class="card-activity">' + escapeHtml(activity) + '</div>' +
       '<div class="card-footer">' +
         '<div class="card-stats">' +
@@ -316,38 +391,193 @@ function flashFirstFeedItem() {
 }
 
 function updateMetrics() {
-  const activeCount = sessions.filter(s => s.status === 'active').length;
+  const activeCount = sessions.filter(s => s.status === 'active' || s.status === 'waiting' || s.status === 'held').length;
   const attentionCount = sessions.filter(s => s.status === 'waiting' || s.status === 'errored').length;
-  const totalSessions = sessions.length;
 
   document.getElementById('metricActive').textContent = activeCount;
   document.getElementById('metricAttention').textContent = attentionCount;
-  document.getElementById('metricTokens').textContent = totalSessions;
-  document.getElementById('metricCost').textContent = '$0.00';
+
+  // B007: Fetch aggregate usage
+  fetch('/api/usage').then(r => r.json()).then(data => {
+    document.getElementById('metricTokens').textContent = formatTokenCount(data.totalTokens || 0);
+    document.getElementById('metricCost').textContent = '$' + (data.estimatedCostUSD || 0).toFixed(2);
+  }).catch(() => {});
+}
+
+function formatTokenCount(n) {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+  return n.toString();
 }
 
 function updateTitle() {
   const title = document.getElementById('contentTitle');
   const backBtn = document.getElementById('btnBack');
+  // B006: hold/resume button in content actions
+  let holdBtn = document.getElementById('btnHold');
+  if (!holdBtn) {
+    holdBtn = document.createElement('button');
+    holdBtn.id = 'btnHold';
+    holdBtn.className = 'btn';
+    holdBtn.style.display = 'none';
+    document.querySelector('.content-actions')?.prepend(holdBtn);
+  }
+
   if (selectedSessionId) {
     const s = sessions.find(s => s.id === selectedSessionId);
     title.textContent = s ? s.name : 'All Sessions';
     backBtn.style.display = 'inline-flex';
+
+    // Show hold/resume for sdk-managed active/held sessions
+    if (s && s.sessionType === 'sdk-managed' && (s.status === 'active' || s.status === 'held')) {
+      holdBtn.style.display = 'inline-flex';
+      if (s.status === 'held') {
+        holdBtn.textContent = '\u25B6 Resume';
+        holdBtn.onclick = () => resumeSession(s.id);
+        holdBtn.style.color = 'var(--green)';
+      } else {
+        holdBtn.textContent = '\u23F8 Hold';
+        holdBtn.onclick = () => holdSession(s.id);
+        holdBtn.style.color = '';
+      }
+    } else {
+      holdBtn.style.display = 'none';
+    }
   } else {
     title.textContent = 'All Sessions';
     backBtn.style.display = 'none';
+    holdBtn.style.display = 'none';
+  }
+}
+
+let transcriptRenderedCount = 0;
+
+function renderTranscriptMessage(msg) {
+  const time = msg.timestamp ? formatTime(msg.timestamp) : '';
+
+  if (msg.type === 'user') {
+    return '<div class="msg msg-user">' +
+      '<div class="msg-role msg-role-user">User <span class="msg-time">' + time + '</span></div>' +
+      '<div class="msg-text">' + escapeHtml(msg.text) + '</div>' +
+    '</div>';
+  }
+
+  if (msg.type === 'assistant') {
+    return '<div class="msg msg-assistant">' +
+      '<div class="msg-role msg-role-assistant">Claude <span class="msg-time">' + time + '</span></div>' +
+      '<div class="msg-text">' + renderMarkdown(msg.text) + '</div>' +
+    '</div>';
+  }
+
+  if (msg.type === 'tool_use') {
+    return '<div class="msg msg-tool-use">' +
+      '<div class="msg-role msg-role-tool"><span class="msg-tool-name">' + escapeHtml(msg.toolName || 'Tool') + '</span> <span class="msg-time">' + time + '</span></div>' +
+      '<div class="msg-text">' + escapeHtml(msg.text) + '</div>' +
+    '</div>';
+  }
+
+  if (msg.type === 'tool_result') {
+    const isError = msg.text && (msg.text.includes('Error') || msg.text.includes('error') || msg.text.includes('ENOENT'));
+    return '<div class="msg msg-tool-result' + (isError ? ' error' : '') + '">' +
+      escapeHtml(msg.text) +
+    '</div>';
+  }
+
+  if (msg.type === 'system') {
+    return '<div class="msg msg-system">' + escapeHtml(msg.text) + '</div>';
+  }
+
+  return '';
+}
+
+function renderTranscript() {
+  const panel = document.getElementById('transcriptPanel');
+  const body = document.getElementById('transcriptBody');
+  if (!panel || !body) return;
+
+  if (!transcriptLoaded) {
+    body.innerHTML = '<div class="transcript-loading">Loading transcript...</div>';
+    transcriptRenderedCount = 0;
+    return;
+  }
+
+  if (transcriptMessages.length === 0) {
+    body.innerHTML = '<div class="transcript-loading">No transcript data available</div>';
+    transcriptRenderedCount = 0;
+    return;
+  }
+
+  // Check if user has scrolled up (not at bottom)
+  const wasAtBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 50;
+
+  // Remove working indicator before appending new messages (may be re-added at end)
+  if (transcriptMessages.length > transcriptRenderedCount) {
+    const existingWorking = body.querySelector('.msg-working');
+    if (existingWorking) existingWorking.remove();
+  }
+
+  if (transcriptRenderedCount === 0) {
+    // First render — build all messages at once
+    body.innerHTML = transcriptMessages.map(renderTranscriptMessage).join('');
+    transcriptRenderedCount = transcriptMessages.length;
+  } else if (transcriptMessages.length > transcriptRenderedCount) {
+    // Incremental append — only add new messages
+    const newMessages = transcriptMessages.slice(transcriptRenderedCount);
+    const fragment = document.createElement('div');
+    fragment.innerHTML = newMessages.map(renderTranscriptMessage).join('');
+    while (fragment.firstChild) {
+      body.appendChild(fragment.firstChild);
+    }
+    transcriptRenderedCount = transcriptMessages.length;
+  }
+
+  // Add working indicator at the bottom
+  const selectedSession = sessions.find(s => s.id === selectedSessionId);
+  const shouldShowWorking = selectedSession && (isSessionWorking(selectedSession) || sessionThinking[selectedSessionId]);
+  const hasWorking = !!body.querySelector('.msg-working');
+  if (shouldShowWorking && !hasWorking) {
+    body.insertAdjacentHTML('beforeend', '<div class="msg-working"><div class="working-dots"><span></span><span></span><span></span></div> Claude is working...</div>');
+  } else if (!shouldShowWorking && hasWorking) {
+    const w = body.querySelector('.msg-working');
+    if (w) w.remove();
+  }
+
+  // Only auto-scroll if user was already at bottom
+  if (wasAtBottom || transcriptAutoScroll) {
+    body.scrollTop = body.scrollHeight;
+  }
+}
+
+function toggleToolExpand(el) {
+  const textEl = el.querySelector('.msg-text');
+  if (textEl) {
+    textEl.classList.toggle('msg-collapsed');
+    textEl.classList.toggle('msg-expanded');
   }
 }
 
 function renderAll() {
   try {
+    const grid = document.getElementById('sessionGrid');
+    const panel = document.getElementById('transcriptPanel');
+
+    // Toggle between grid and transcript panel
+    if (selectedSessionId) {
+      grid.style.display = 'none';
+      panel.style.display = 'flex';
+      renderTranscript();
+    } else {
+      grid.style.display = '';
+      panel.style.display = 'none';
+    }
+
     renderSidebar();
     renderGrid();
     renderPermissions();
     renderFeed();
     updateMetrics();
     updateTitle();
-    console.log('[CC] renderAll complete — sessions:', sessions.length, 'feed:', feedEvents.length);
+    updateInputBar();
   } catch (err) {
     console.error('[CC] renderAll ERROR:', err);
   }
@@ -355,13 +585,69 @@ function renderAll() {
 
 // === INTERACTIONS ===
 function selectSession(id) {
-  selectedSessionId = selectedSessionId === id ? null : id;
-  renderAll();
+  if (selectedSessionId === id) {
+    // Deselect — go back to grid view
+    closeTranscript();
+    return;
+  }
+  selectedSessionId = id;
+  transcriptMessages = [];
+  transcriptLoaded = false;
+  transcriptRenderedCount = 0;
+
+  const session = sessions.find(s => s.id === id);
+  if (session && session.sessionType === 'sdk-managed') {
+    // SDK sessions stream output via session-output events
+    // Mark as loaded so the input bar appears immediately
+    transcriptLoaded = true;
+    renderAll();
+    // Also try loading any existing JSONL transcript for history
+    loadTranscript(id);
+  } else {
+    renderAll();
+    loadTranscript(id);
+  }
 }
 
 function clearSelection() {
+  closeTranscript();
+}
+
+function closeTranscript() {
+  if (selectedSessionId) {
+    socket.emit('unwatch-transcript');
+  }
   selectedSessionId = null;
+  transcriptMessages = [];
+  transcriptLoaded = false;
+  transcriptRenderedCount = 0;
   renderAll();
+}
+
+function loadTranscript(sessionId) {
+  fetch('/api/sessions/' + sessionId + '/transcript')
+    .then(r => r.json())
+    .then(data => {
+      if (sessionId !== selectedSessionId) return; // selection changed
+      transcriptMessages = data.messages || [];
+      transcriptLoaded = true;
+      renderTranscript();
+      // Start polling for new messages
+      socket.emit('watch-transcript', { sessionId: sessionId });
+    })
+    .catch(err => {
+      console.error('[CC] Failed to load transcript:', err);
+      transcriptLoaded = true;
+      transcriptMessages = [];
+      renderTranscript();
+    });
+}
+
+function focusSessionTerminal() {
+  if (!selectedSessionId) return;
+  fetch('/api/sessions/' + selectedSessionId + '/focus', { method: 'POST' })
+    .then(() => showToast('info', 'Switching to terminal...'))
+    .catch(() => showToast('warning', 'Could not focus terminal window'));
 }
 
 function toggleCardDetail(id) {
@@ -413,6 +699,49 @@ function denyPermission(sessionId) {
   setTimeout(() => renderAll(), 250);
 }
 
+function dismissSession(sessionId) {
+  const card = document.getElementById('card-' + sessionId);
+  if (card) {
+    card.style.animation = 'slideUp 0.2s ease-in forwards';
+    setTimeout(() => {
+      socket.emit('dismiss-session', { sessionId: sessionId });
+    }, 200);
+  } else {
+    socket.emit('dismiss-session', { sessionId: sessionId });
+  }
+}
+
+function startRename(sessionId, el) {
+  const currentName = el.textContent;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = currentName;
+  input.className = 'rename-input';
+  input.onclick = function(e) { e.stopPropagation(); };
+
+  function commitRename() {
+    const newName = input.value.trim();
+    if (newName && newName !== currentName) {
+      socket.emit('rename-session', { sessionId: sessionId, name: newName });
+    }
+    el.textContent = newName || currentName;
+    el.style.display = '';
+    if (input.parentNode) input.remove();
+  }
+
+  input.onblur = commitRename;
+  input.onkeydown = function(e) {
+    e.stopPropagation();
+    if (e.key === 'Enter') { input.blur(); }
+    if (e.key === 'Escape') { input.value = currentName; input.blur(); }
+  };
+
+  el.style.display = 'none';
+  el.parentNode.insertBefore(input, el.nextSibling);
+  input.focus();
+  input.select();
+}
+
 function setView(mode, btn) {
   currentView = mode;
   document.querySelectorAll('.view-toggle button').forEach(b => b.classList.remove('active'));
@@ -447,17 +776,37 @@ function showToast(type, message) {
 // === NEW SESSION MODAL ===
 function openNewSession() {
   document.getElementById('newSessionModal').classList.add('visible');
-  document.getElementById('newProjectDir').focus();
 }
 
 function closeNewSession() {
   document.getElementById('newSessionModal').classList.remove('visible');
+  // Collapse quick launch on close
+  const opts = document.getElementById('quickLaunchOptions');
+  if (opts) opts.style.display = 'none';
 }
 
+// B002: Open Launcher in a new terminal
+function launchViaLauncher() {
+  socket.emit('launch-session', { viaLauncher: true });
+  showToast('info', 'Launcher opened — session will appear when started');
+  closeNewSession();
+}
+
+// B002: Toggle quick launch options
+function toggleQuickLaunch() {
+  const opts = document.getElementById('quickLaunchOptions');
+  if (!opts) return;
+  opts.style.display = opts.style.display === 'none' ? 'block' : 'none';
+  if (opts.style.display === 'block') {
+    const dirInput = document.getElementById('newProjectDir');
+    if (dirInput) dirInput.focus();
+  }
+}
+
+// B002: Launch a dashboard-managed quick session
 function launchSession() {
   const dir = document.getElementById('newProjectDir').value.trim();
   const name = document.getElementById('newSessionName').value.trim();
-  const prompt = document.getElementById('newSessionPrompt').value.trim();
   const permMode = document.getElementById('newPermMode').value;
 
   if (!dir) {
@@ -465,11 +814,13 @@ function launchSession() {
     return;
   }
 
-  socket.emit('launch-session', {
+  // Quick session is always dashboard-managed (sdk-managed)
+  // The initial prompt will be typed in the transcript input bar after launch
+  socket.emit('launch-sdk-session', {
     projectDir: dir,
     name: name || undefined,
-    prompt: prompt || undefined,
-    permMode: permMode
+    prompt: 'Hello — ready for instructions.',
+    permissionMode: permMode,
   });
 
   showToast('info', 'Launching session: ' + escapeHtml(name || dir));
@@ -478,8 +829,104 @@ function launchSession() {
   // Reset form
   document.getElementById('newProjectDir').value = '';
   document.getElementById('newSessionName').value = '';
-  document.getElementById('newSessionPrompt').value = '';
   document.getElementById('newPermMode').value = 'default';
+}
+
+// B005: Kill session
+let killTargetId = null;
+
+function openKillModal(sessionId) {
+  killTargetId = sessionId;
+  const session = sessions.find(s => s.id === sessionId);
+  if (!session) return;
+  document.getElementById('killModalText').textContent =
+    'This will terminate "' + session.name + '". Any in-progress work will be lost.';
+  document.getElementById('killModal').classList.add('visible');
+}
+
+function closeKillModal() {
+  document.getElementById('killModal').classList.remove('visible');
+  killTargetId = null;
+}
+
+function confirmKill() {
+  if (!killTargetId) return;
+  socket.emit('kill-session', { sessionId: killTargetId });
+  showToast('warning', 'Stopping session...');
+  closeKillModal();
+}
+
+// B006: Hold/resume session
+function holdSession(sessionId) {
+  socket.emit('hold-session', { sessionId });
+}
+
+function resumeSession(sessionId) {
+  socket.emit('resume-session', { sessionId });
+}
+
+function sendSessionMessage() {
+  const input = document.getElementById('transcriptInput');
+  const text = input.value.trim();
+  if (!text || !selectedSessionId) return;
+
+  const session = sessions.find(s => s.id === selectedSessionId);
+  if (!session || session.sessionType !== 'sdk-managed') return;
+  if (sessionThinking[selectedSessionId]) return;
+
+  socket.emit('send-message', { sessionId: selectedSessionId, text: text });
+  input.value = '';
+  input.style.height = 'auto';
+}
+
+function updateInputBar() {
+  const bar = document.getElementById('transcriptInputBar');
+  const input = document.getElementById('transcriptInput');
+  const btn = document.getElementById('transcriptSendBtn');
+  const focusBar = document.getElementById('transcriptFocusBar');
+  if (!bar || !input || !btn) return;
+
+  if (!selectedSessionId) {
+    bar.style.display = 'none';
+    return;
+  }
+
+  const session = sessions.find(s => s.id === selectedSessionId);
+  if (!session) {
+    bar.style.display = 'none';
+    return;
+  }
+
+  if (session.sessionType === 'sdk-managed') {
+    bar.style.display = 'flex';
+    bar.classList.remove('disabled-bar');
+    if (focusBar) focusBar.style.display = 'none';
+
+    // B006: On hold — show hold bar instead of input
+    if (session.status === 'held') {
+      bar.classList.add('disabled-bar');
+      input.disabled = true;
+      input.placeholder = 'Session on hold — click Resume to continue';
+      btn.disabled = true;
+      return;
+    }
+
+    const thinking = sessionThinking[selectedSessionId];
+    if (thinking) {
+      bar.classList.add('thinking');
+      input.disabled = true;
+      input.placeholder = 'Claude is thinking...';
+      btn.disabled = true;
+    } else {
+      bar.classList.remove('thinking');
+      input.disabled = false;
+      input.placeholder = 'Type a message...';
+      btn.disabled = false;
+    }
+  } else {
+    bar.style.display = 'none';
+    if (focusBar) focusBar.style.display = '';
+  }
 }
 
 // === COMMAND PALETTE ===
@@ -731,5 +1178,134 @@ setInterval(() => {
   });
 })();
 
+// === B009: DRAG AND DROP FILES ===
+let pendingFiles = []; // { name, size, content, language }
+
+const TEXT_EXTENSIONS = {
+  '.ts': 'typescript', '.tsx': 'tsx', '.js': 'javascript', '.jsx': 'jsx',
+  '.cs': 'csharp', '.py': 'python', '.json': 'json', '.md': 'markdown',
+  '.html': 'html', '.css': 'css', '.sql': 'sql', '.yaml': 'yaml', '.yml': 'yaml',
+  '.txt': 'text', '.log': 'text', '.sh': 'bash', '.ps1': 'powershell',
+  '.xml': 'xml', '.csv': 'csv', '.env': 'text', '.gitignore': 'text',
+};
+
+const MAX_FILE_SIZE = 100 * 1024; // 100KB
+const MAX_FILES = 3;
+
+(function initDragDrop() {
+  const body = document.getElementById('transcriptBody');
+  if (!body) return;
+
+  body.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    const session = sessions.find(s => s.id === selectedSessionId);
+    if (!session || session.sessionType !== 'sdk-managed') return;
+    body.classList.add('drag-over');
+  });
+
+  body.addEventListener('dragleave', (e) => {
+    if (!body.contains(e.relatedTarget)) {
+      body.classList.remove('drag-over');
+    }
+  });
+
+  body.addEventListener('drop', (e) => {
+    e.preventDefault();
+    body.classList.remove('drag-over');
+
+    const session = sessions.find(s => s.id === selectedSessionId);
+    if (!session || session.sessionType !== 'sdk-managed') {
+      showToast('warning', 'File drop only available for dashboard-managed sessions');
+      return;
+    }
+
+    const files = Array.from(e.dataTransfer.files);
+    for (const file of files) {
+      if (pendingFiles.length >= MAX_FILES) {
+        showToast('warning', 'Max ' + MAX_FILES + ' files per message');
+        break;
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        showToast('error', file.name + ' is too large (max 100KB)');
+        continue;
+      }
+      const ext = '.' + file.name.split('.').pop().toLowerCase();
+      const lang = TEXT_EXTENSIONS[ext];
+      if (!lang) {
+        showToast('error', file.name + ': only text files can be added');
+        continue;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        pendingFiles.push({
+          name: file.name,
+          size: file.size,
+          content: ev.target.result,
+          language: lang,
+        });
+        renderFileIndicators();
+      };
+      reader.readAsText(file);
+    }
+  });
+})();
+
+function renderFileIndicators() {
+  let container = document.getElementById('fileIndicators');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'fileIndicators';
+    const inputBar = document.getElementById('transcriptInputBar');
+    if (inputBar) inputBar.parentNode.insertBefore(container, inputBar);
+  }
+
+  container.innerHTML = pendingFiles.map((f, i) =>
+    '<div class="file-indicator">' +
+      '<span style="font-size:14px">&#128206;</span>' +
+      '<span class="file-name">' + escapeHtml(f.name) + '</span>' +
+      '<span class="file-size">(' + (f.size / 1024).toFixed(1) + ' KB)</span>' +
+      '<button class="file-remove" onclick="removePendingFile(' + i + ')">&times;</button>' +
+    '</div>'
+  ).join('');
+}
+
+function removePendingFile(index) {
+  pendingFiles.splice(index, 1);
+  renderFileIndicators();
+}
+
+// Override sendSessionMessage to prepend file content
+const originalSendSessionMessage = sendSessionMessage;
+sendSessionMessage = function() {
+  if (pendingFiles.length > 0) {
+    const input = document.getElementById('transcriptInput');
+    let prefix = '';
+    for (const f of pendingFiles) {
+      prefix += 'Here is the content of `' + f.name + '`:\n\n```' + f.language + '\n' + f.content + '\n```\n\n';
+    }
+    input.value = prefix + input.value;
+    pendingFiles = [];
+    renderFileIndicators();
+  }
+  originalSendSessionMessage();
+};
+
 // === INIT ===
 renderAll();
+
+// Textarea auto-grow and Enter key handler for text input
+(function() {
+  const input = document.getElementById('transcriptInput');
+  if (!input) return;
+  input.addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 96) + 'px';
+  });
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendSessionMessage();
+    }
+  });
+})();

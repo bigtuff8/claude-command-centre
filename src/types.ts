@@ -1,10 +1,12 @@
-export type SessionStatus = 'active' | 'waiting' | 'completed' | 'errored';
+export type SessionStatus = 'active' | 'waiting' | 'completed' | 'errored' | 'stopped' | 'held';
+export type SessionType = 'hook-monitored' | 'sdk-managed';
 
 export interface Session {
   id: string;
   name: string;
   project: string;
   status: SessionStatus;
+  sessionType: SessionType;
   permissionMode: string;
   startedAt: Date;
   lastActivity: Date;
@@ -12,6 +14,8 @@ export interface Session {
   filesModified: Set<string>;
   events: HookEvent[];
   pendingPermission: PendingPermission | null;
+  transcriptPath: string | null;
+  terminalPid: number | null;
 }
 
 export interface HookEvent {
@@ -53,6 +57,7 @@ export interface HookResponse {
 }
 
 export interface AppConfig {
+  host: string;
   port: number;
   permissionTimeoutSeconds: number;
   notifications: {
@@ -70,16 +75,26 @@ export interface SessionDTO {
   name: string;
   project: string;
   status: SessionStatus;
+  sessionType: SessionType;
   startedAt: string;
   lastActivity: string;
   toolCount: number;
   filesModified: string[];
+  hasTranscript: boolean;
   pendingPermission: {
     toolName: string;
     toolInput: Record<string, any>;
     toolUseId: string;
     receivedAt: string;
   } | null;
+}
+
+export interface TranscriptMessageDTO {
+  type: 'user' | 'assistant' | 'tool_use' | 'tool_result' | 'system';
+  text: string;
+  toolName?: string;
+  toolId?: string;
+  timestamp?: string;
 }
 
 export interface FeedEventDTO {

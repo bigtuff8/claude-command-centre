@@ -3,6 +3,7 @@ import * as path from 'path';
 import { AppConfig } from './types';
 
 const DEFAULT_CONFIG: AppConfig = {
+  host: 'localhost',
   port: 4111,
   permissionTimeoutSeconds: 60,
   notifications: {
