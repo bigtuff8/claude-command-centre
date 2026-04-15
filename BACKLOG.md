@@ -1,6 +1,6 @@
 # Command Centre — Product Backlog
 
-**Last Updated:** 2026-04-13
+**Last Updated:** 2026-04-15
 **Referenced by:** PROJECT_STATUS.md, feature-list.json
 
 ---
@@ -37,14 +37,16 @@ Items 1-9 are the current design/build scope. Items 2+3 were merged (F005/F015 a
 | B | Send text input to terminal sessions | F018 | F029 solved input for dashboard-managed sessions. This extends it to hook-monitored terminal sessions via Agent SDK or stdin pipe. |
 | C | Session history persistence | F024 | Persist sessions, transcripts, and events to disk (JSON/SQLite) so data survives server restarts. |
 | D | Happy Coder compatibility | F025 | Verify HTTP hooks fire correctly through the `happy` wrapper. Ensure events, permissions, and text input all work. |
+| E | Handover / setup docs for terminal focus | — | Document the auto-window-focus feature for new machine setup. Covers: launcher must be rebuilt (`npm run build` in launcher dir), `devices.json` must have the new machine entry, CC must be pulled from GitHub and built. The feature works automatically once the launcher is updated — no per-machine config needed beyond what the launcher already requires. Include in INSTALL.md or a dedicated HANDOVER.md. |
 
 ---
 
 ## Known Issues (Current Build)
 
-1. **Server process lifecycle** — No mechanism to keep server running persistently. User must manually start in a terminal. (Addressed by item 3)
+1. **Server process lifecycle** — pm2 scripts exist but user must run `npm run pm2:start` once. No auto-recovery if pm2 isn't used. (Addressed by item 3)
 2. **Pre-existing sessions invisible** — Sessions started before hooks were injected don't appear. Fundamental limitation of hook injection timing.
 3. **Session names derived from folder only** — `--name` flag from Claude Code may not be in hook payload. (Related to unprioritised item A)
+4. **Terminal focus requires updated launcher** — Sessions launched before the launcher PID registration update (2026-04-15) won't have terminal PIDs. Only affects existing sessions; new launches work automatically.
 
 ---
 
@@ -80,3 +82,7 @@ Items 1-9 are the current design/build scope. Items 2+3 were merged (F005/F015 a
 | F031 | Transcript scroll-lock (incremental append) | 2026-04-12 |
 | F032 | Rename/label sessions from dashboard | 2026-04-12 |
 | F033 | Show session start time on cards | 2026-04-12 |
+| B001-B009 | Priority backlog (launcher integration, new session modal, pm2, graceful degradation, kill, hold, cost tracking, mobile, drag-and-drop) | 2026-04-13 |
+| F038 | Terminal focus via launcher PID registration | 2026-04-15 |
+| F039 | Per-session token counts in sidebar | 2026-04-15 |
+| F040 | Spawner fix for paths with spaces (.bat approach) | 2026-04-15 |
