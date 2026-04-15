@@ -4,6 +4,22 @@ const sessions = new Map<string, Session>();
 const feedEvents: FeedEventDTO[] = [];
 let config: AppConfig;
 
+// Terminal registry: maps normalized project path → terminal window PID.
+// Populated by the launcher's POST to /api/register-terminal before the session starts.
+const terminalRegistry = new Map<string, number>();
+
+function normalizePath(p: string): string {
+  return p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+}
+
+export function registerTerminal(projectPath: string, windowPid: number): void {
+  terminalRegistry.set(normalizePath(projectPath), windowPid);
+}
+
+export function lookupTerminalPid(projectPath: string): number | null {
+  return terminalRegistry.get(normalizePath(projectPath)) ?? null;
+}
+
 export function initSessionStore(appConfig: AppConfig): void {
   config = appConfig;
 }
@@ -32,6 +48,11 @@ export function getOrCreateSession(sessionId: string, cwd?: string, permissionMo
   }
   if (cwd && !session.project) session.project = cwd;
   if (permissionMode) session.permissionMode = permissionMode;
+  // Auto-resolve terminal PID from registry if not yet known
+  if (!session.terminalPid && session.project) {
+    const pid = lookupTerminalPid(session.project);
+    if (pid) session.terminalPid = pid;
+  }
   return session;
 }
 

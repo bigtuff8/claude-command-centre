@@ -3,6 +3,9 @@ import { HookPayload, FeedEventDTO } from '../types';
 import { getOrCreateSession, addEvent, addFeedEvent, sessionToDTO } from '../state/sessions';
 import { createPermissionRequest, isAutoPassTool } from '../services/permission';
 import { notifyPermissionRequest, notifySessionComplete } from '../services/notifications';
+// Terminal PID is now resolved via the registry (populated by the launcher's
+// POST to /api/register-terminal). The getOrCreateSession() call auto-applies
+// the registry lookup, so no additional discovery logic is needed here.
 
 let broadcastFn: (event: string, data: any) => void;
 
@@ -49,7 +52,11 @@ function handleSessionStart(req: Request, res: Response): void {
   broadcastFn('session-added', sessionToDTO(session));
   broadcastFn('feed-event', feedEvent);
 
-  console.log(`[SessionStart] ${session.name} (${session.id.substring(0, 8)})`);
+  if (session.terminalPid) {
+    console.log(`[SessionStart] ${session.name} (${session.id.substring(0, 8)}) → terminal PID ${session.terminalPid}`);
+  } else {
+    console.log(`[SessionStart] ${session.name} (${session.id.substring(0, 8)}) — no terminal PID yet`);
+  }
   res.json({});
 }
 

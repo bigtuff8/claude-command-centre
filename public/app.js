@@ -11,6 +11,7 @@ let transcriptMessages = [];
 let transcriptAutoScroll = true;
 let transcriptLoaded = false;
 let sessionThinking = {}; // sessionId -> boolean
+let sessionUsage = {}; // sessionId -> { totalTokens, estimatedCostUSD }
 
 // === SOCKET EVENT HANDLERS ===
 socket.on('connect', () => {
@@ -235,6 +236,9 @@ function renderSidebar() {
       ? formatElapsedForCompleted(s.lastActivity)
       : formatElapsed(s.startedAt);
 
+    const usage = sessionUsage[s.id];
+    const tokenStr = usage && usage.totalTokens > 0 ? formatTokenCount(usage.totalTokens) : '';
+
     return '<div class="session-item' +
       (isSelected ? ' selected' : '') +
       (needsAttention ? ' needs-attention' : '') +
@@ -242,7 +246,12 @@ function renderSidebar() {
       '<div class="status-dot ' + s.status + (working ? ' working' : '') + '"></div>' +
       '<div class="session-info">' +
         '<div class="session-name">' + escapeHtml(s.name) + (s.sessionType === 'sdk-managed' ? ' <span class="sdk-badge">&#9000;</span>' : '') + '</div>' +
-        '<div class="session-meta"><span>' + (working ? 'Working...' : capitalize(s.status)) + '</span><span>' + formatTime(s.startedAt) + '</span><span>' + elapsed + '</span></div>' +
+        '<div class="session-meta">' +
+          '<span>' + (working ? 'Working...' : capitalize(s.status)) + '</span>' +
+          '<span>' + formatTime(s.startedAt) + '</span>' +
+          '<span>' + elapsed + '</span>' +
+          (tokenStr ? '<span class="session-tokens">' + tokenStr + '</span>' : '') +
+        '</div>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -402,6 +411,19 @@ function updateMetrics() {
     document.getElementById('metricTokens').textContent = formatTokenCount(data.totalTokens || 0);
     document.getElementById('metricCost').textContent = '$' + (data.estimatedCostUSD || 0).toFixed(2);
   }).catch(() => {});
+
+  // Fetch per-session usage for sidebar display
+  for (const s of sessions) {
+    fetch('/api/sessions/' + s.id + '/usage')
+      .then(r => r.json())
+      .then(data => {
+        const prev = sessionUsage[s.id];
+        const changed = !prev || prev.totalTokens !== (data.totalTokens || 0);
+        sessionUsage[s.id] = { totalTokens: data.totalTokens || 0, estimatedCostUSD: data.estimatedCostUSD || 0 };
+        if (changed) renderSidebar();
+      })
+      .catch(() => {});
+  }
 }
 
 function formatTokenCount(n) {

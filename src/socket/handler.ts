@@ -221,7 +221,7 @@ export function initSocketHandler(io: SocketServer): void {
     socket.on('focus-session', (data: { sessionId: string }) => {
       const session = getSession(data.sessionId);
       if (session) {
-        focusTerminalWindow(session.terminalPid, session.name);
+        focusTerminalWindow(session.terminalPid, session.name, session.project);
       }
     });
 

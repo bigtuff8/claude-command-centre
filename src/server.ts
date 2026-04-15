@@ -3,12 +3,12 @@ import { createServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
 import * as path from 'path';
 import { AppConfig } from './types';
-import { initSessionStore, getSession } from './state/sessions';
+import { initSessionStore, getSession, registerTerminal } from './state/sessions';
 import { initPermissionService } from './services/permission';
 import { initNotifications } from './services/notifications';
 import { initSdkSessionService } from './services/sdk-session';
 import { readTranscript, readUsageFromTranscript } from './services/transcript';
-import { focusTerminalWindow } from './services/focus';
+import { focusTerminalWindow, resolveTerminalWindowPid } from './services/focus';
 import { createHooksRouter } from './routes/hooks';
 import { initSocketHandler } from './socket/handler';
 
@@ -44,6 +44,26 @@ export function createApp(config: AppConfig) {
   // Health check
   app.get('/healthz', (_req, res) => {
     res.json({ status: 'ok', uptime: process.uptime() });
+  });
+
+  // API: register a terminal window PID for a project path (called by the launcher)
+  app.post('/api/register-terminal', async (req, res) => {
+    const { projectPath, launcherPid } = req.body;
+    if (!projectPath || !launcherPid) {
+      res.status(400).json({ error: 'projectPath and launcherPid required' });
+      return;
+    }
+
+    console.log(`[Register] Terminal registration: ${projectPath} (launcher PID ${launcherPid})`);
+    const windowPid = await resolveTerminalWindowPid(launcherPid);
+    if (windowPid) {
+      registerTerminal(projectPath, windowPid);
+      console.log(`[Register] Mapped ${projectPath} → window PID ${windowPid}`);
+      res.json({ ok: true, windowPid });
+    } else {
+      console.log(`[Register] Could not find window for launcher PID ${launcherPid}`);
+      res.json({ ok: false, reason: 'window_not_found' });
+    }
   });
 
   // API: get current state (for page refresh / reconnection)
@@ -121,7 +141,7 @@ export function createApp(config: AppConfig) {
       res.status(404).json({ error: 'Session not found' });
       return;
     }
-    focusTerminalWindow(session.terminalPid, session.name);
+    focusTerminalWindow(session.terminalPid, session.name, session.project);
     res.json({ ok: true });
   });
 

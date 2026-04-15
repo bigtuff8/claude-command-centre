@@ -1,15 +1,16 @@
-import { spawn } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { join } from 'path';
+import { writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { registerTerminal } from '../state/sessions';
+import { findWindowByTitle } from './focus';
 
 // B002: Resolve launcher path — try common locations
 function getLauncherCommand(): string {
-  // The launcher is a TypeScript project that compiles to dist/index.js
-  // Try workspace-relative path first (matches launcher config)
   const workspacePath = process.env.CLAUDE_WORKSPACE;
   if (workspacePath) {
     return `node "${join(workspacePath, 'launcher', 'dist', 'index.js')}"`;
   }
-  // Fallback: assume launcher is on PATH as 'claude-launcher' or just spawn raw claude
   return 'claude';
 }
 
@@ -21,7 +22,6 @@ export function spawnSession(projectDir: string, name?: string, prompt?: string,
   let cwd: string;
 
   if (viaLauncher) {
-    // B002: Open launcher in a new terminal
     fullCmd = getLauncherCommand();
     cwd = projectDir || process.cwd();
   } else {
@@ -34,10 +34,36 @@ export function spawnSession(projectDir: string, name?: string, prompt?: string,
   }
 
   if (isWindows) {
-    spawn('cmd', ['/c', 'start', '""', '/d', cwd, 'cmd', '/k', fullCmd], {
-      detached: true,
-      stdio: 'ignore',
-    }).unref();
+    // Write a temporary .bat file to avoid all quoting hell with nested cmd /c /k start.
+    // The bat sets the window title and runs the command in the correct directory.
+    const windowTitle = `CC: ${name || cwd.replace(/.*[\\/]/, '') || 'Session'}`;
+    const batPath = join(tmpdir(), `cc-launch-${Date.now()}.bat`);
+    const batContent = [
+      '@echo off',
+      `title ${windowTitle}`,
+      `cd /d "${cwd}"`,
+      fullCmd,
+      `del "${batPath}"`,  // self-cleanup
+    ].join('\r\n');
+
+    writeFileSync(batPath, batContent, 'utf-8');
+    console.log(`[Spawner] Wrote launch script: ${batPath}`);
+    console.log(`[Spawner] Command: ${fullCmd}`);
+    console.log(`[Spawner] CWD: ${cwd}`);
+
+    exec(`start "CC-Launch" "${batPath}"`, {
+      windowsHide: false,
+    });
+
+    // After the window opens, find it by its CC: title and register the PID
+    setTimeout(() => {
+      findWindowByTitle(windowTitle).then(pid => {
+        if (pid) {
+          registerTerminal(cwd, pid);
+          console.log(`[Spawner] Registered terminal PID ${pid} for ${cwd}`);
+        }
+      });
+    }, 2000);
   } else if (isMac) {
     const script = `tell application "Terminal" to do script "cd '${cwd}' && ${fullCmd}"`;
     spawn('osascript', ['-e', script], {

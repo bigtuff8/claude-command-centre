@@ -1,7 +1,7 @@
 # Command Centre
 
 **Status:** Active
-**Last Active:** 2026-04-13
+**Last Active:** 2026-04-15
 **Quick Context:** Web dashboard for monitoring and managing multiple Claude Code sessions from a single view. Windows-native, portable, shareable.
 
 ## Current State
@@ -16,7 +16,7 @@
 - **Graceful Degradation (B004):** 5s timeouts on fire-and-forget hooks. Sessions work normally when CC is down.
 - **Session Kill (B005):** Stop button on cards, confirmation dialog, new `stopped` status. Works for dashboard-managed and PID-tracked terminal sessions.
 - **Session Hold (B006):** Hold/resume for dashboard-managed sessions. Auto-declines permissions when held.
-- **Cost Tracking (B007):** Token usage extracted from transcript JSONL. Per-session and aggregate API endpoints. Metrics bar shows live totals.
+- **Cost Tracking (B007):** Token usage extracted from transcript JSONL. Per-session and aggregate API endpoints. Metrics bar shows aggregate totals. **Per-session token counts now shown in sidebar** next to each session's elapsed time.
 - **Mobile (B008):** Responsive CSS for phone/tablet. `host` config for network binding (Tailscale).
 - **Drag-and-Drop (B009):** Drop text files onto transcript panel. Content prepended to next message.
 - **Testing:** 33 Playwright E2E tests, all passing. Run with `npm test`.
@@ -32,7 +32,7 @@
 - **Desktop toast notifications** — fire on permission requests, clickable (opens dashboard in browser)
 - **Session transcript panel** — full JSONL parsing, live polling, renders user/assistant/tool messages
 - **Transcript scroll-lock** — incremental DOM append preserves scroll position when reading history. Working indicator add/remove is now conditional (fixes permission-event scroll reset bug).
-- **Click-to-terminal focus** — Win32 SetForegroundWindow with Alt key trick, brings CLI window to front from dashboard
+- **Click-to-terminal focus** — Launcher registers terminal PID with Command Centre at launch time. Process tree walk resolves launcher PID → terminal window PID. Focus uses stored PID directly via Win32 SetForegroundWindow. Reliably brings the correct terminal to front even with multiple sessions.
 - **Dismiss completed sessions** — x button on completed/errored cards
 - **Rename sessions** — double-click session name on card for inline rename, syncs via Socket.io
 - **Session start time** — shown on cards and sidebar
@@ -54,7 +54,7 @@ Dashboard-managed sessions are intentionally simple. Full-featured sessions go t
 ### What Needs Work
 - **F037 (scroll-lock on permissions):** Fixed in code but needs live verification with real permission events
 - **B009 (drag-and-drop):** Built but needs manual testing with real files — Playwright can't simulate native file drops
-- **B001 (launcher auto-start):** Built but needs testing on a fresh session (this session started before the code existed)
+- **Terminal focus for pre-existing sessions:** Sessions launched before the launcher update won't have registered PIDs. Only sessions launched via the updated launcher get automatic terminal registration.
 
 ### Remaining Unprioritised Items
 - Launcher passes `--name` to sessions (F014)
@@ -88,7 +88,8 @@ Dashboard-managed sessions are intentionally simple. Full-featured sessions go t
 
 | File | Purpose |
 |------|---------|
-| `src/services/sdk-session.ts` | **NEW** — SDK session management (spawn, parse, stream, resume) |
+| `src/services/sdk-session.ts` | SDK session management (spawn, parse, stream, resume) |
+| `src/services/focus.ts` | Terminal window focus — PID resolution via process tree walk, Win32 foreground API |
 | `src/` | TypeScript server source (11 files) |
 | `public/` | Dashboard frontend (index.html, styles.css, app.js) |
 | `tests/` | Playwright E2E tests (33 tests) |
@@ -113,3 +114,4 @@ Dashboard-managed sessions are intentionally simple. Full-featured sessions go t
 | 2026-04-12 (eve) | Built: F026 (clickable toasts), F031 (scroll-lock), F032 (rename), F033 (start time). Fixed: spawner `wt`→`cmd`, HTTP hooks re-injected, rename DOM bug. Set up Playwright (21 tests). SDK research complete for F029. |
 | 2026-04-13 (am) | **F029 text input built.** CLI stream-json approach. sdk-session.ts service, input bar UI, thinking state. Spawn hang fix: `bash -c 'echo "" \| claude ...'`. Identified launcher gap. Added F035-F037 to backlog. 21 tests passing. |
 | 2026-04-13 (pm) | **Priority backlog B001-B009 — full harness run.** Backlog prioritised and cleaned up. Ran Build harness: Initialisation → Designer → Developer → Tester. Found root cause of disappearing hooks (launcher settings-sync overwrites). Built all 9 features across launcher + CC codebases. New Session modal redesigned, kill button, hold state, cost tracking from JSONL, mobile CSS, drag-and-drop files. 33 Playwright tests, 0 failures. Launcher now auto-starts CC server and preserves HTTP hooks in cloud template. |
+| 2026-04-15 | **Terminal focus fix + per-session tokens.** Fixed click-to-terminal bringing wrong window — replaced heuristic window-title matching with launcher PID registration (`POST /api/register-terminal`). Launcher now registers its PID with CC at launch; CC walks process tree to find terminal window and stores mapping. Fixed spawner not opening windows (path quoting). Added per-session token counts to sidebar. Fixed Claude Desktop app being focused instead of CLI windows. |

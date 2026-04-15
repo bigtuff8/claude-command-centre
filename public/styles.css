@@ -100,7 +100,8 @@ body {
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 .session-info { flex: 1; min-width: 0; }
 .session-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.session-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; display: flex; gap: 8px; }
+.session-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; display: flex; gap: 8px; flex-wrap: wrap; }
+.session-tokens { color: var(--blue); font-family: 'JetBrains Mono', monospace; font-size: 10px; }
 
 /* === CONTENT AREA === */
 .content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
