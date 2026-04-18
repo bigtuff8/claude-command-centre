@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Command Centre - Portfolio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="portfolio.css">
+</head>
+<body>
+
+<!-- Aurora Background -->
+<div class="aurora">
+  <div class="aurora-blob aurora-blob-1"></div>
+  <div class="aurora-blob aurora-blob-2"></div>
+  <div class="aurora-blob aurora-blob-3"></div>
+</div>
+
+<!-- Toast Container -->
+<div id="toastContainer" class="toast-container"></div>
+
+<!-- Metrics Bar (sticky top) -->
+<div class="metrics-bar">
+  <div class="metrics-bar-brand">
+    <span class="dot"></span>
+    Command Centre
+  </div>
+  <div class="metrics-group">
+    <div class="metric-item">
+      <span class="metric-value" id="metricProjects" style="color:var(--text-secondary)">--</span>
+      <span class="metric-label">Projects</span>
+    </div>
+    <div class="metric-item">
+      <span class="metric-value" id="metricActive" style="color:var(--green)">--</span>
+      <span class="metric-label">Active</span>
+    </div>
+    <div class="metric-item">
+      <span class="metric-value" id="metricStale" style="color:var(--amber)">--</span>
+      <span class="metric-label">Stale</span>
+    </div>
+    <div class="metric-item">
+      <span class="metric-value" id="metricAtGate" style="color:var(--blue)">--</span>
+      <span class="metric-label">At Gate</span>
+    </div>
+    <div class="metric-item">
+      <span class="metric-value" id="metricRisks" style="color:var(--rose)">--</span>
+      <span class="metric-label">Risks</span>
+    </div>
+  </div>
+  <div class="metrics-bar-actions">
+    <button class="btn btn-sm" id="autoApproveBtn">Auto-Approve</button>
+    <button class="btn btn-sm">Ctrl+K</button>
+    <button class="btn btn-sm btn-primary" id="newSessionBtn">+ New Session</button>
+  </div>
+</div>
+
+<!-- Navigation -->
+<div class="nav-section">
+  <div class="nav-tabs">
+    <!--
+      Sessions tab: navigates back to the existing sessions dashboard (index.html).
+      Instead of duplicating the sessions UI, this is a simple link.
+      When the portfolio page is integrated into the main dashboard later,
+      this will become a JS-driven tab switch instead of a navigation link.
+    -->
+    <a href="/" class="nav-tab" data-tab="sessions">Sessions <span class="tab-badge" id="sessionsBadge" style="display:none">0</span></a>
+    <div class="nav-tab active" data-tab="portfolio">Portfolio</div>
+    <div class="nav-tab" data-tab="risks">Risks</div>
+    <div class="nav-tab" data-tab="activity">Activity</div>
+    <div class="nav-tab" data-tab="audit">Audit</div>
+  </div>
+  <div class="filter-row">
+    <!-- Portfolio filters (default visible) -->
+    <div class="tab-filters" id="filters-portfolio">
+      <div class="filter-pills">
+        <div class="pill active" data-filter="all">All</div>
+        <div class="pill" data-filter="work">Work</div>
+        <div class="pill" data-filter="personal">Personal</div>
+        <div class="pill" data-filter="stale">Stale</div>
+        <div class="pill" data-filter="gate">At Gate</div>
+      </div>
+      <div class="filter-right">
+        <span class="filter-hint" id="portfolioFilterHint"></span>
+        <div class="view-toggle">
+          <button class="btn-toggle active" data-view="board">Board</button>
+          <button class="btn-toggle" data-view="list">List</button>
+        </div>
+      </div>
+    </div>
+    <!-- Risks filters -->
+    <div class="tab-filters" id="filters-risks" style="display:none">
+      <div class="filter-pills" id="riskStatusFilters">
+        <div class="risk-filter-pill active" data-rfilter="status" data-val="all">All</div>
+        <div class="risk-filter-pill" data-rfilter="status" data-val="open">Open</div>
+        <div class="risk-filter-pill" data-rfilter="status" data-val="accepted">Accepted</div>
+        <div class="risk-filter-pill" data-rfilter="status" data-val="mitigated">Mitigated</div>
+      </div>
+      <div class="filter-right">
+        <select class="risk-select" id="riskProjectFilter">
+          <option value="all">All Projects</option>
+          <!-- Populated by JS -->
+        </select>
+      </div>
+    </div>
+    <!-- Activity filters -->
+    <div class="tab-filters" id="filters-activity" style="display:none">
+      <div class="filter-pills" id="activityDateFilters">
+        <div class="pill" data-afilter="date" data-val="today">Today</div>
+        <div class="pill active" data-afilter="date" data-val="week">This Week</div>
+        <div class="pill" data-afilter="date" data-val="month">This Month</div>
+        <div class="pill" data-afilter="date" data-val="all">All Time</div>
+      </div>
+      <div class="filter-right">
+        <select class="risk-select" id="activityProjectFilter">
+          <option value="all">All Projects</option>
+          <!-- Populated by JS -->
+        </select>
+        <div class="filter-pills" id="activityTypeFilters" style="margin-left:8px">
+          <div class="pill active" data-afilter="type" data-val="all">All</div>
+          <div class="pill" data-afilter="type" data-val="commits">Commits</div>
+          <div class="pill" data-afilter="type" data-val="sessions">Sessions</div>
+        </div>
+      </div>
+    </div>
+    <!-- Audit filters -->
+    <div class="tab-filters" id="filters-audit" style="display:none">
+      <div class="filter-pills" id="auditCategoryFilters">
+        <div class="pill active">All Categories</div>
+        <div class="pill">Data Dictionaries</div>
+        <div class="pill">Status Files</div>
+        <div class="pill">Feature Lists</div>
+        <div class="pill">Risk Exposure</div>
+      </div>
+      <div class="filter-right">
+        <span class="filter-hint" id="auditHealthHint"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Global Permission Bar (visible on ALL tabs when a session needs permission) -->
+<div class="permission-bar" id="globalPermissionBar" style="display:none">
+  <div class="permission-bar-left">
+    <div class="permission-dot"></div>
+    <div class="permission-text" id="permissionText">
+      <!-- Populated by JS: e.g. <strong>session-name</strong> needs permission: <code>Tool</code> -->
+    </div>
+  </div>
+  <div class="permission-actions">
+    <button class="btn-approve" id="permApproveBtn">Approve</button>
+    <button class="btn-deny" id="permDenyBtn">Deny</button>
+    <span class="permission-timer" id="permissionTimer"></span>
+  </div>
+</div>
+
+<!-- Main Content -->
+<div class="main-content">
+
+  <!-- ============================== -->
+  <!-- TAB: PORTFOLIO (default visible) -->
+  <!-- ============================== -->
+  <div id="tab-portfolio">
+
+    <!-- BOARD VIEW (default) -->
+    <div class="board-view active" id="boardView">
+      <div class="bento-grid">
+
+        <!-- ROW 1: Gate Queue (8 cols) + Portfolio Overview (4 cols) -->
+        <div class="glass tile-gate" id="gateQueueTile">
+          <div class="tile-header">
+            <span class="tile-dot" style="background:var(--amber)"></span>
+            SteerCo Gate Queue
+          </div>
+          <!-- Gate items populated by JS -->
+          <div id="gateQueueItems"></div>
+        </div>
+
+        <div class="glass tile-portfolio" id="portfolioOverviewTile">
+          <div class="tile-header">Portfolio Overview</div>
+          <div class="portfolio-metrics" id="portfolioMetrics">
+            <!-- 6 metric boxes populated by JS -->
+          </div>
+        </div>
+
+        <!-- ROW 2: Stale Projects (6 cols) + Risk Register Summary (6 cols) -->
+        <div class="glass tile-stale" id="staleProjectsTile">
+          <div class="tile-header">
+            <span style="margin-right:2px">&#9888;</span> Needs Attention <span class="count" id="staleCount"></span>
+          </div>
+          <!-- Stale project items populated by JS -->
+          <div id="staleProjectItems"></div>
+        </div>
+
+        <div class="glass tile-risks" id="riskSummaryTile" style="background:rgba(17,17,19,0.75);">
+          <div class="tile-header">
+            <span class="tile-dot" style="background:var(--rose)"></span>
+            Risk Register <span class="count" id="riskSummaryCount"></span>
+          </div>
+          <!-- Risk items populated by JS -->
+          <div id="riskSummaryItems"></div>
+        </div>
+
+        <!-- ROW 3: Project Cards (full width) -->
+        <div class="tile-projects" style="background:transparent;border:none;padding:0;">
+          <div class="tile-header" style="padding:0 0 4px 0;">All Projects <span class="count" id="projectsCount"></span></div>
+          <div class="projects-grid" id="projectsGrid">
+            <!-- Project cards populated by JS -->
+          </div>
+        </div>
+
+        <!-- ROW 4: Data Dict Audit (4 cols) + Activity Feed (4 cols) + Quick Stats (4 cols) -->
+        <div class="glass tile-third" id="dictAuditTile">
+          <div class="tile-header">Data Dictionary Audit</div>
+          <div class="dict-list" id="dictList">
+            <!-- Dict rows populated by JS -->
+          </div>
+        </div>
+
+        <div class="glass tile-third" id="recentActivityTile">
+          <div class="tile-header">Recent Activity</div>
+          <div class="activity-list" id="recentActivityList">
+            <!-- Activity entries populated by JS -->
+          </div>
+        </div>
+
+        <div class="glass tile-third" id="quickStatsTile">
+          <div class="tile-header">This Week</div>
+          <div class="stat-row" id="quickStatsContent">
+            <!-- Split bar + stat items populated by JS -->
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- LIST VIEW -->
+    <div class="list-view" id="listView">
+      <div class="glass" style="padding:0;overflow:hidden;">
+        <div class="table-container">
+          <table class="project-table">
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Project</th>
+                <th>Type</th>
+                <th>Last Active</th>
+                <th>Age</th>
+                <th>Gate</th>
+                <th>Features</th>
+                <th>Risks</th>
+                <th>Dict</th>
+                <th>Activity (30d)</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody">
+              <!-- Table rows with collapsible sections populated by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============================== -->
+  <!-- TAB: RISKS                     -->
+  <!-- ============================== -->
+  <div id="tab-risks" style="display:none">
+
+    <!-- Risk Summary Metrics (4 boxes) -->
+    <div class="risks-metrics" id="risksMetrics">
+      <div class="risk-metric-box">
+        <div class="risk-metric-value" id="riskMetricOpen" style="color:var(--rose)">--</div>
+        <div class="risk-metric-label">Open</div>
+      </div>
+      <div class="risk-metric-box">
+        <div class="risk-metric-value" id="riskMetricAccepted" style="color:var(--amber)">--</div>
+        <div class="risk-metric-label">Accepted</div>
+      </div>
+      <div class="risk-metric-box">
+        <div class="risk-metric-value" id="riskMetricMitigated" style="color:var(--green)">--</div>
+        <div class="risk-metric-label">Mitigated</div>
+      </div>
+      <div class="risk-metric-box">
+        <div class="risk-metric-value" id="riskMetricTotal" style="color:var(--text-secondary)">--</div>
+        <div class="risk-metric-label">Total</div>
+      </div>
+    </div>
+
+    <!-- Risk Table -->
+    <div class="glass" style="padding:0;overflow:hidden;">
+      <div class="risks-table-container">
+        <table class="risks-table" id="risksTable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Date Raised</th>
+              <th>Project</th>
+              <th>Perspective</th>
+              <th>Severity</th>
+              <th>Status</th>
+              <th>Description</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="risksTableBody">
+            <!-- Risk rows with expandable detail populated by JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== -->
+  <!-- TAB: ACTIVITY                  -->
+  <!-- ============================== -->
+  <div id="tab-activity" style="display:none">
+
+    <!-- Timeline (left) + Heatmap (right) -->
+    <div class="activity-layout" id="activityLayout">
+      <!-- LEFT: Timeline -->
+      <div class="glass" style="padding:0;">
+        <div class="timeline-container" id="timelineContainer" style="padding:16px;">
+          <!-- Timeline date headers and entries populated by JS -->
+        </div>
+      </div>
+
+      <!-- RIGHT: Heatmap + Stats -->
+      <div>
+        <div class="glass heatmap-container">
+          <div class="tile-header">Activity Heatmap</div>
+          <div id="heatmapGrid"></div>
+          <div class="heatmap-legend">
+            <span>Less</span>
+            <div class="heatmap-legend-cell heatmap-level-0"></div>
+            <div class="heatmap-legend-cell heatmap-level-1"></div>
+            <div class="heatmap-legend-cell heatmap-level-2"></div>
+            <div class="heatmap-legend-cell heatmap-level-3"></div>
+            <div class="heatmap-legend-cell heatmap-level-4"></div>
+            <span>More</span>
+          </div>
+        </div>
+
+        <div class="glass" style="margin-top:16px;">
+          <div class="activity-stats-title" id="activityStatsTitle">This Week</div>
+          <div id="activityStatsContent">
+            <!-- Stat rows populated by JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== -->
+  <!-- TAB: AUDIT                     -->
+  <!-- ============================== -->
+  <div id="tab-audit" style="display:none">
+
+    <!-- Health Score Gauge -->
+    <div class="glass audit-health-score" id="auditHealthScore">
+      <div class="health-gauge">
+        <svg width="140" height="140" viewBox="0 0 140 140">
+          <circle class="health-gauge-bg" cx="70" cy="70" r="60"></circle>
+          <circle class="health-gauge-fill" id="healthGaugeFill" cx="70" cy="70" r="60"
+            stroke="var(--green)"
+            stroke-dasharray="377"
+            stroke-dashoffset="377"></circle>
+        </svg>
+        <div class="health-gauge-value" id="healthGaugeValue">--%</div>
+      </div>
+      <div class="health-gauge-label">Portfolio Health Score</div>
+      <div class="health-gauge-subtitle" id="healthGaugeSubtitle">Based on documentation completeness, data dictionary coverage, and project freshness</div>
+    </div>
+
+    <!-- Audit Grid: 2x2 -->
+    <div class="audit-grid" id="auditGrid">
+
+      <!-- Tile 1: Data Dictionary Coverage -->
+      <div class="glass audit-tile" id="auditDictTile">
+        <div class="audit-tile-header">
+          <span class="audit-tile-title">Data Dictionary Coverage</span>
+          <span class="audit-tile-score" id="auditDictScore"></span>
+        </div>
+        <div class="audit-progress-bar">
+          <div class="audit-progress-fill" id="auditDictProgress"></div>
+        </div>
+        <table class="audit-table">
+          <thead>
+            <tr><th>Project</th><th>Has Dict</th><th>Last Updated</th><th>Status</th></tr>
+          </thead>
+          <tbody id="auditDictBody">
+            <!-- Populated by JS -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Tile 2: PROJECT_STATUS.md Freshness -->
+      <div class="glass audit-tile" id="auditFreshnessTile">
+        <div class="audit-tile-header">
+          <span class="audit-tile-title">PROJECT_STATUS.md Freshness</span>
+          <span class="audit-tile-score" id="auditFreshnessScore"></span>
+        </div>
+        <div class="freshness-counts" id="freshnessCounts">
+          <!-- Fresh / Stale / Very Stale / Missing counts populated by JS -->
+        </div>
+        <table class="audit-table">
+          <thead>
+            <tr><th>Project</th><th>Last Updated</th><th>Status</th></tr>
+          </thead>
+          <tbody id="auditFreshnessBody">
+            <!-- Populated by JS -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Tile 3: Feature List Coverage -->
+      <div class="glass audit-tile" id="auditFeaturesTile">
+        <div class="audit-tile-header">
+          <span class="audit-tile-title">Feature List Coverage</span>
+          <span class="audit-tile-score" id="auditFeaturesScore"></span>
+        </div>
+        <div id="auditFeaturesContent">
+          <!-- Summary, progress bar, feature bars populated by JS -->
+        </div>
+      </div>
+
+      <!-- Tile 4: Risk Exposure Summary -->
+      <div class="glass audit-tile" id="auditRiskTile">
+        <div class="audit-tile-header">
+          <span class="audit-tile-title">Risk Exposure Summary</span>
+          <span class="audit-tile-score" id="auditRiskScore"></span>
+        </div>
+        <div id="auditRiskContent">
+          <!-- Severity breakdown, perspective bars, project table populated by JS -->
+        </div>
+        <span class="audit-link" id="auditRiskLink">View full risk register &rarr;</span>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- Detail Panel (shared, slide-in from right) -->
+<div class="detail-overlay" id="detailOverlay"></div>
+<div class="detail-panel" id="detailPanel">
+  <button class="detail-close" id="detailClose">&times;</button>
+  <div id="detailContent">
+    <!-- Populated by JS when a project is clicked -->
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="portfolio.js"></script>
+</body>
+</html>

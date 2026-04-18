@@ -83,6 +83,12 @@ export interface AppConfig {
   maxEventsPerSession: number;
   maxTotalFeedEvents: number;
   openBrowser: boolean;
+  portfolio?: {
+    projectRoots: string[];
+    refreshIntervalMs: number;
+    stalenessThresholds: { freshDays: number; agingDays: number; staleDays: number };
+    maxCommitsPerRepo: number;
+  };
 }
 
 export interface SessionDTO {

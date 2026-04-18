@@ -10,6 +10,7 @@ import { initSdkSessionService } from './services/sdk-session';
 import { readTranscript, readUsageFromTranscript } from './services/transcript';
 import { focusTerminalWindow, resolveTerminalWindowPid } from './services/focus';
 import { createHooksRouter } from './routes/hooks';
+import { createPortfolioRouter } from './routes/portfolio';
 import { initSocketHandler } from './socket/handler';
 
 export function createApp(config: AppConfig) {
@@ -40,6 +41,10 @@ export function createApp(config: AppConfig) {
   // Hook endpoints
   const hooksRouter = createHooksRouter(broadcast, config);
   app.use('/hooks', hooksRouter);
+
+  // Portfolio API routes
+  const portfolioRouter = createPortfolioRouter();
+  app.use('/api/portfolio', portfolioRouter);
 
   // Health check
   app.get('/healthz', (_req, res) => {
