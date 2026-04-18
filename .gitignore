@@ -5,4 +5,5 @@ config.local.json
 *.log
 logs/
 test-results/
+data/
 .env

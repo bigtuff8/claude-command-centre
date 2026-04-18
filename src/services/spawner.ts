@@ -1,16 +1,37 @@
 import { exec, spawn } from 'child_process';
 import { join } from 'path';
-import { writeFileSync } from 'fs';
+import { writeFileSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { registerTerminal } from '../state/sessions';
 import { findWindowByTitle } from './focus';
+import { loadConfig } from '../config';
 
-// B002: Resolve launcher path — try common locations
+// B002: Resolve launcher path — config > env > common locations > error
 function getLauncherCommand(): string {
+  const config = loadConfig();
+
+  // 1. Explicit config path
+  if (config.launcherPath) {
+    return `node "${config.launcherPath}"`;
+  }
+
+  // 2. Environment variable
   const workspacePath = process.env.CLAUDE_WORKSPACE;
   if (workspacePath) {
-    return `node "${join(workspacePath, 'launcher', 'dist', 'index.js')}"`;
+    const envPath = join(workspacePath, 'launcher', 'dist', 'index.js');
+    if (existsSync(envPath)) {
+      return `node "${envPath}"`;
+    }
   }
+
+  // 3. Global npm install (where the launcher actually lives)
+  const npmGlobalPath = join(process.env.APPDATA || '', 'npm', 'node_modules', 'claude-launcher', 'dist', 'index.js');
+  if (existsSync(npmGlobalPath)) {
+    return `node "${npmGlobalPath}"`;
+  }
+
+  // 4. Fallback — assume 'claude' is on PATH (opens CLI directly, not launcher)
+  console.warn('[Spawner] Could not find launcher — falling back to claude CLI');
   return 'claude';
 }
 

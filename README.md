@@ -38,7 +38,7 @@ The wizard handles everything: installs dependencies, builds, injects hooks, sta
 ```
 Claude Code sessions  ──HTTP hooks──>  Command Centre server  ──WebSocket──>  Dashboard (browser)
                                        (Express + Socket.io)
-                                       localhost:4111
+                                       0.0.0.0:4111
 ```
 
 Claude Code fires HTTP hooks on session start, tool use, permission requests, and session end. The Command Centre server receives these events, tracks session state in memory, and broadcasts updates to the dashboard via Socket.io.
@@ -69,12 +69,15 @@ claude-command-centre/
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `host` | `"localhost"` | Bind address. Set to `"0.0.0.0"` for network/Tailscale access |
+| `host` | `"0.0.0.0"` | Bind address. `"0.0.0.0"` for network/Tailscale access, `"localhost"` for local only |
 | `port` | `4111` | Server port |
 | `permissionTimeoutSeconds` | `30` | How long to wait for dashboard approval before falling through to CLI |
 | `notifications.enabled` | `true` | Windows toast notifications |
 | `notifications.sound` | `true` | Notification sound |
-| `autoPassTools` | `["Read","Glob","Grep","WebSearch","WebFetch"]` | Tools that bypass the dashboard permission prompt |
+| `autoPassTools` | `["Read","Glob","Grep","WebSearch","WebFetch"]` | Tools that bypass the dashboard permission prompt (no permission needed) |
+| `autoApproveAll` | `false` | Auto-approve ALL permission requests (no dashboard interaction) |
+| `autoApproveTools` | `[]` | Auto-approve specific tools (e.g. `["Bash","Edit"]`) |
+| `launcherPath` | `""` | Explicit path to launcher index.js (auto-detected if empty) |
 | `maxEventsPerSession` | `200` | Event buffer per session |
 | `maxTotalFeedEvents` | `500` | Total activity feed buffer |
 | `openBrowser` | `true` | Auto-open dashboard on server start |

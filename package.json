@@ -14,12 +14,10 @@
     "setup:wizard": "node setup-wizard.js",
     "test": "npx playwright test",
     "test:headed": "npx playwright test --headed",
-    "pm2:start": "pm2 start dist/index.js --name command-centre --output logs/out.log --error logs/error.log",
-    "pm2:stop": "pm2 stop command-centre",
-    "pm2:restart": "pm2 restart command-centre",
-    "pm2:status": "pm2 status command-centre",
-    "pm2:logs": "pm2 logs command-centre",
-    "pm2:startup": "pm2 startup && pm2 save"
+    "watchdog": "node scripts/watchdog.js",
+    "svc:install": "node scripts/install-service.js",
+    "svc:uninstall": "node -e \"require('fs').unlinkSync(require('path').join(process.env.APPDATA,'Microsoft','Windows','Start Menu','Programs','Startup','CommandCentre.bat'));console.log('Removed startup script')\"",
+    "svc:status": "node -e \"const p=require('path').join(process.env.APPDATA,'Microsoft','Windows','Start Menu','Programs','Startup','CommandCentre.bat');console.log(require('fs').existsSync(p)?'Installed: '+p:'Not installed')\""
   },
   "keywords": [
     "claude",
@@ -31,7 +29,6 @@
   "license": "MIT",
   "dependencies": {
     "express": "^4.21.0",
-    "node-notifier": "^10.0.1",
     "open": "^10.1.0",
     "socket.io": "^4.8.0"
   },

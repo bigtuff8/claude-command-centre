@@ -38,7 +38,7 @@ export function createApp(config: AppConfig) {
   app.use(express.static(publicDir));
 
   // Hook endpoints
-  const hooksRouter = createHooksRouter(broadcast);
+  const hooksRouter = createHooksRouter(broadcast, config);
   app.use('/hooks', hooksRouter);
 
   // Health check
@@ -101,28 +101,48 @@ export function createApp(config: AppConfig) {
     res.json({ messages, transcriptPath: session.transcriptPath });
   });
 
-  // B007: API: get token usage for a session
+  // B010: API: get token usage for a session (prefer live data for SDK sessions)
   app.get('/api/sessions/:id/usage', (req, res) => {
     const session = getSession(req.params.id);
     if (!session) {
       res.status(404).json({ error: 'Session not found' });
       return;
     }
-    if (!session.transcriptPath) {
-      res.json({ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, totalTokens: 0, estimatedCostUSD: 0 });
+    // SDK sessions with result event data: use accurate CLI-reported usage
+    if (session.usage.lastUpdated) {
+      res.json({
+        inputTokens: session.usage.inputTokens,
+        outputTokens: session.usage.outputTokens,
+        cacheReadTokens: session.usage.cacheReadTokens,
+        cacheCreationTokens: session.usage.cacheCreationTokens,
+        totalTokens: session.usage.inputTokens + session.usage.outputTokens,
+        estimatedCostUSD: session.usage.totalCostUSD,
+        source: 'live',
+      });
       return;
     }
-    const usage = readUsageFromTranscript(session.transcriptPath);
-    res.json(usage);
+    // Hook-monitored sessions: fall back to deduplicated transcript parsing
+    if (session.transcriptPath) {
+      const usage = readUsageFromTranscript(session.transcriptPath);
+      res.json({ ...usage, source: 'transcript' });
+      return;
+    }
+    res.json({ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, totalTokens: 0, estimatedCostUSD: 0, source: 'none' });
   });
 
-  // B007: API: get aggregate usage across all sessions
+  // B010: API: get aggregate usage across all sessions
   app.get('/api/usage', (_req, res) => {
     const { getAllSessions } = require('./state/sessions');
     const allSessions = getAllSessions();
     let totalInput = 0, totalOutput = 0, totalCacheRead = 0, totalCost = 0;
     for (const s of allSessions) {
-      if (s.transcriptPath) {
+      // Prefer live session usage (SDK sessions with result events)
+      if (s.usage.lastUpdated) {
+        totalInput += s.usage.inputTokens;
+        totalOutput += s.usage.outputTokens;
+        totalCacheRead += s.usage.cacheReadTokens;
+        totalCost += s.usage.totalCostUSD;
+      } else if (s.transcriptPath) {
         const u = readUsageFromTranscript(s.transcriptPath);
         totalInput += u.inputTokens;
         totalOutput += u.outputTokens;
@@ -130,7 +150,7 @@ export function createApp(config: AppConfig) {
         totalCost += u.estimatedCostUSD;
       }
     }
-    const totalTokens = totalInput + totalOutput + totalCacheRead;
+    const totalTokens = totalInput + totalOutput;
     res.json({ totalTokens, totalInput, totalOutput, totalCacheRead, estimatedCostUSD: totalCost });
   });
 

@@ -86,6 +86,11 @@ export interface TranscriptUsage {
   estimatedCostUSD: number;
 }
 
+/**
+ * B010: Extract token usage from transcript JSONL with requestId deduplication.
+ * Multiple JSONL lines can share the same requestId (one per content block in an API response).
+ * Each carries the same cumulative usage — taking the LAST entry per requestId avoids overcounting.
+ */
 export function readUsageFromTranscript(transcriptPath: string, pricing?: { inputPer1k: number; outputPer1k: number; cacheReadPer1k: number }): TranscriptUsage {
   const defaults = { inputPer1k: 0.003, outputPer1k: 0.015, cacheReadPer1k: 0.0003 };
   const p = pricing || defaults;
@@ -98,21 +103,30 @@ export function readUsageFromTranscript(transcriptPath: string, pricing?: { inpu
     const content = fs.readFileSync(transcriptPath, 'utf-8');
     const lines = content.split('\n').filter(Boolean);
 
+    // Deduplicate by requestId — keep last entry per requestId
+    const byRequestId = new Map<string, any>();
+    let fallbackKey = 0;
+
     for (const line of lines) {
       try {
         const entry = JSON.parse(line);
         if (entry.type === 'assistant' && entry.message?.usage) {
-          const u = entry.message.usage;
-          result.inputTokens += u.input_tokens || 0;
-          result.outputTokens += u.output_tokens || 0;
-          result.cacheReadTokens += u.cache_read_input_tokens || 0;
-          result.cacheCreationTokens += u.cache_creation_input_tokens || 0;
+          const key = entry.requestId || entry.uuid || `_fallback_${fallbackKey++}`;
+          byRequestId.set(key, entry.message.usage);
         }
       } catch { /* skip malformed lines */ }
     }
+
+    // Sum deduplicated usage
+    for (const u of byRequestId.values()) {
+      result.inputTokens += u.input_tokens || 0;
+      result.outputTokens += u.output_tokens || 0;
+      result.cacheReadTokens += u.cache_read_input_tokens || 0;
+      result.cacheCreationTokens += u.cache_creation_input_tokens || 0;
+    }
   } catch { /* file read error */ }
 
-  result.totalTokens = result.inputTokens + result.outputTokens + result.cacheReadTokens + result.cacheCreationTokens;
+  result.totalTokens = result.inputTokens + result.outputTokens;
   result.estimatedCostUSD = (result.inputTokens / 1000 * p.inputPer1k) + (result.outputTokens / 1000 * p.outputPer1k) + (result.cacheReadTokens / 1000 * p.cacheReadPer1k);
 
   return result;

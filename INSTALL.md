@@ -219,10 +219,23 @@ The WebSocket connection dropped. This happens if the server restarts. The dashb
 
 ### Mobile access via Tailscale
 
-1. Edit `config.json`: set `"host": "0.0.0.0"`
+The server binds to `0.0.0.0` by default (all interfaces). Access from any device on your network:
+
+1. Find your machine's IP: `ipconfig` (look for Tailscale adapter or local network)
+2. Access from phone/tablet: `http://<your-ip>:4111`
+3. Both devices must be on the same network or Tailscale tailnet
+
+To restrict to localhost only, set `"host": "localhost"` in `config.json` and restart.
+
+### Auto-approve permissions
+
+If you never deny permission requests, you can auto-approve everything:
+
+1. Edit `config.json`: set `"autoApproveAll": true`
 2. Restart the server
-3. Access via your Tailscale IP: `http://<tailscale-ip>:4111`
-4. Both devices must be on the same Tailscale network
+3. All permission requests are instantly approved — no dashboard interaction needed
+
+For selective auto-approve, use `"autoApproveTools": ["Bash", "Edit"]` instead.
 
 ---
 

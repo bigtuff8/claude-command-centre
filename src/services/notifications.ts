@@ -2,67 +2,58 @@ import { AppConfig } from '../types';
 import { exec } from 'child_process';
 
 let config: AppConfig;
-let notifier: any;
 let dashboardUrl: string;
 
 export function initNotifications(appConfig: AppConfig): void {
   config = appConfig;
   dashboardUrl = `http://localhost:${config.port}`;
-  if (config.notifications.enabled) {
-    try {
-      notifier = require('node-notifier');
-    } catch {
-      console.warn('node-notifier not available — desktop notifications disabled.');
-    }
-  }
 }
 
-function openDashboard(): void {
-  exec(`start "" "${dashboardUrl}"`, { windowsHide: true });
+/**
+ * B011: PowerShell-based Windows toast notifications.
+ * Uses native Windows.UI.Notifications API via PowerShell.
+ * Click opens the dashboard URL in the default browser (handled by Windows, not a callback).
+ * Works from Action Centre even hours after the toast was shown.
+ */
+function showToast(title: string, message: string, sound: boolean): void {
+  if (!config.notifications.enabled) return;
+  if (process.platform !== 'win32') return;
+
+  const safeTitle = escapeXml(title);
+  const safeMessage = escapeXml(message);
+  const silent = sound ? 'false' : 'true';
+
+  const toastXml = `<toast launch="${dashboardUrl}" activationType="protocol"><visual><binding template="ToastGeneric"><text>${safeTitle}</text><text>${safeMessage}</text></binding></visual><audio silent="${silent}" /></toast>`;
+
+  const ps = `
+[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom, ContentType = WindowsRuntime] | Out-Null
+$xml = [Windows.Data.Xml.Dom.XmlDocument]::new()
+$xml.LoadXml('${toastXml.replace(/'/g, "''")}')
+$toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
+[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Command Centre').Show($toast)
+`;
+
+  exec(`powershell -NoProfile -NonInteractive -Command "${ps.replace(/"/g, '\\"')}"`, { windowsHide: true }, (err) => {
+    if (err) console.warn(`[Notification] Toast failed: ${err.message.substring(0, 100)}`);
+  });
 }
 
 export function notifyPermissionRequest(sessionName: string, toolName: string, toolInput: Record<string, any>): void {
-  if (!notifier || !config.notifications.enabled) return;
-
   const inputSummary = getInputSummary(toolName, toolInput);
-
-  notifier.notify({
-    title: `${sessionName} needs permission`,
-    message: `${toolName}: ${inputSummary}`,
-    sound: config.notifications.sound,
-    wait: true,
-    appID: 'Command Centre',
-  }, (_err: any, response: string) => {
-    if (response === 'activate') openDashboard();
-  });
+  showToast(`${sessionName} needs permission`, `${toolName}: ${inputSummary}`, config.notifications.sound);
 }
 
 export function notifySessionComplete(sessionName: string): void {
-  if (!notifier || !config.notifications.enabled) return;
-
-  notifier.notify({
-    title: 'Session completed',
-    message: sessionName,
-    sound: false,
-    wait: true,
-    appID: 'Command Centre',
-  }, (_err: any, response: string) => {
-    if (response === 'activate') openDashboard();
-  });
+  showToast('Session completed', sessionName, false);
 }
 
 export function notifyError(sessionName: string, detail: string): void {
-  if (!notifier || !config.notifications.enabled) return;
+  showToast(`${sessionName} error`, detail, config.notifications.sound);
+}
 
-  notifier.notify({
-    title: `${sessionName} error`,
-    message: detail,
-    sound: config.notifications.sound,
-    wait: true,
-    appID: 'Command Centre',
-  }, (_err: any, response: string) => {
-    if (response === 'activate') openDashboard();
-  });
+function escapeXml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 }
 
 function getInputSummary(toolName: string, toolInput: Record<string, any>): string {

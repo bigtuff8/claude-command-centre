@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { HookPayload, FeedEventDTO } from '../types';
+import { HookPayload, FeedEventDTO, AppConfig } from '../types';
 import { getOrCreateSession, addEvent, addFeedEvent, sessionToDTO } from '../state/sessions';
 import { createPermissionRequest, isAutoPassTool } from '../services/permission';
 import { notifyPermissionRequest, notifySessionComplete } from '../services/notifications';
@@ -8,9 +8,19 @@ import { notifyPermissionRequest, notifySessionComplete } from '../services/noti
 // the registry lookup, so no additional discovery logic is needed here.
 
 let broadcastFn: (event: string, data: any) => void;
+let appConfig: AppConfig;
 
-export function createHooksRouter(broadcast: (event: string, data: any) => void): Router {
+export function getHooksConfig(): AppConfig {
+  return appConfig;
+}
+
+export function setAutoApproveAll(value: boolean): void {
+  appConfig.autoApproveAll = value;
+}
+
+export function createHooksRouter(broadcast: (event: string, data: any) => void, config: AppConfig): Router {
   broadcastFn = broadcast;
+  appConfig = config;
   const router = Router();
 
   router.post('/session-start', handleSessionStart);
@@ -139,6 +149,34 @@ async function handlePreToolUse(req: Request, res: Response): Promise<void> {
   if (isAutoPassTool(toolName, session.permissionMode)) {
     broadcastFn('session-updated', sessionToDTO(session));
     res.json({});
+    return;
+  }
+
+  // B012/B017: Auto-approve permissions (session-level overrides global)
+  const sessionAutoApprove = session.autoApprove;
+  const shouldAutoApprove = sessionAutoApprove === true || (sessionAutoApprove === null && (appConfig.autoApproveAll || appConfig.autoApproveTools.includes(toolName)));
+  if (shouldAutoApprove) {
+    const detail = getToolDetail(toolName, toolInput);
+    const humanDetail = getHumanReadableApproval(toolName, toolInput);
+    console.log(`[Permission] Auto-approved: ${session.name} → ${toolName}(${detail})`);
+    broadcastFn('session-updated', sessionToDTO(session));
+    const feedEvt: FeedEventDTO = {
+      timestamp: new Date().toISOString(),
+      sessionId: session.id,
+      sessionName: session.name,
+      eventName: 'PermissionAutoApproved',
+      toolName,
+      detail: humanDetail,
+    };
+    addFeedEvent(feedEvt);
+    broadcastFn('feed-event', feedEvt);
+    res.json({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'allow',
+        permissionDecisionReason: 'Auto-approved via Command Centre',
+      },
+    });
     return;
   }
 
@@ -278,4 +316,34 @@ function getToolDetail(toolName: string, toolInput: Record<string, any>): string
     return `"${String(toolInput.pattern).substring(0, 60)}"`;
   }
   return JSON.stringify(toolInput).substring(0, 80);
+}
+
+function getHumanReadableApproval(toolName: string, toolInput: Record<string, any>): string {
+  const fileName = toolInput.file_path ? String(toolInput.file_path).split(/[/\\]/).pop() : null;
+  switch (toolName) {
+    case 'Bash': {
+      const cmd = String(toolInput.command || '').substring(0, 80);
+      return `Approved running command: ${cmd}`;
+    }
+    case 'Edit':
+      return `Approved editing ${fileName || 'a file'}`;
+    case 'Write':
+      return `Approved writing to ${fileName || 'a file'}`;
+    case 'Read':
+      return `Approved reading ${fileName || 'a file'}`;
+    case 'Glob':
+      return `Approved file search: ${toolInput.pattern || ''}`;
+    case 'Grep':
+      return `Approved content search: "${String(toolInput.pattern || '').substring(0, 60)}"`;
+    case 'Agent':
+      return `Approved launching a sub-agent`;
+    case 'WebSearch':
+      return `Approved web search`;
+    case 'WebFetch':
+      return `Approved fetching a web page`;
+    case 'Skill':
+      return `Approved running skill: ${toolInput.skill || 'unknown'}`;
+    default:
+      return `Approved ${toolName}: ${getToolDetail(toolName, toolInput)}`;
+  }
 }

@@ -2,7 +2,7 @@
   "project": "Command Centre",
   "mode": "unconstrained",
   "created": "2026-04-11",
-  "updated": "2026-04-13",
+  "updated": "2026-04-16",
   "features": [
     {
       "id": "F001",
@@ -21,7 +21,8 @@
         "Step 5: Complete a session — verify it shows 'completed' status"
       ],
       "passes": true,
-      "notes": "Completed 2026-04-12. WebSocket via Socket.io."
+      "live_status": "complete",
+      "notes": "Completed 2026-04-12. WebSocket via Socket.io. Server running on localhost:4111, hooks active in ~/.claude/settings.json."
     },
     {
       "id": "F002",
@@ -40,6 +41,7 @@
         "Step 5: Verify clicking the notification brings focus to the dashboard (or relevant terminal)"
       ],
       "passes": true,
+      "live_status": "complete",
       "notes": "Completed 2026-04-12. Uses node-notifier, clickable."
     },
     {
@@ -60,6 +62,7 @@
         "Step 5: Repeat with 'Deny' — verify the session receives the denial and handles it gracefully"
       ],
       "passes": true,
+      "live_status": "complete",
       "notes": "Completed 2026-04-12. 30s timeout falls through to CLI."
     },
     {
@@ -79,6 +82,7 @@
         "Step 5: Verify status badges are colour-coded (green=active, amber=waiting, red=error, grey=completed)"
       ],
       "passes": true,
+      "live_status": "complete",
       "notes": "Completed 2026-04-12. Includes rename (F032) and start time (F033)."
     },
     {
@@ -97,7 +101,8 @@
         "Step 6: Connect a WebSocket client and verify it receives real-time event broadcasts"
       ],
       "passes": true,
-      "notes": "Completed 2026-04-12. Running on localhost:4111."
+      "live_status": "complete",
+      "notes": "Completed 2026-04-12. Running on localhost:4111. Server is up (healthz 200). Running as manual node process (not pm2)."
     },
     {
       "id": "F007",
@@ -117,6 +122,7 @@
         "Step 5: Verify the feed auto-scrolls to show new events"
       ],
       "passes": true,
+      "live_status": "complete",
       "notes": "Completed 2026-04-12."
     },
     {
@@ -133,6 +139,7 @@
         "Step 4: Document the payload format and response schema"
       ],
       "passes": true,
+      "live_status": "complete",
       "notes": "Completed 2026-04-11. Fully validated."
     },
     {
@@ -151,7 +158,8 @@
         "Step 4: Start a session and verify events flow to server"
       ],
       "passes": true,
-      "notes": "Completed 2026-04-12. ISSUE: Launcher settings sync overwrites these hooks. Must be added to cloud template."
+      "live_status": "complete",
+      "notes": "Completed 2026-04-12. Hooks in ~/.claude/settings.json AND in launcher cloud template. Settings sync preserves them."
     },
     {
       "id": "F011",
@@ -166,7 +174,8 @@
         "Step 3: Modify port, verify change takes effect on restart"
       ],
       "passes": true,
-      "notes": "Completed 2026-04-12."
+      "live_status": "complete",
+      "notes": "Completed 2026-04-12. config.json exists with defaults."
     },
     {
       "id": "F026",
@@ -183,6 +192,7 @@
         "Step 3: Verify dashboard opens in browser"
       ],
       "passes": true,
+      "live_status": "complete",
       "notes": "Completed 2026-04-12."
     },
     {
@@ -200,6 +210,7 @@
         "Step 3: Verify card removed from dashboard"
       ],
       "passes": true,
+      "live_status": "complete",
       "notes": "Completed 2026-04-12."
     },
     {
@@ -218,6 +229,7 @@
         "Step 4: Verify scroll-lock behaviour (auto-scroll pauses when reading history)"
       ],
       "passes": true,
+      "live_status": "complete",
       "notes": "Completed 2026-04-12. Includes markdown rendering."
     },
     {
@@ -237,6 +249,7 @@
         "Step 5: Send a follow-up message (--resume)"
       ],
       "passes": true,
+      "live_status": "complete",
       "notes": "Completed 2026-04-13. Uses bash -c 'echo | claude -p' pattern. Known limitation: bypasses launcher."
     },
     {
@@ -253,7 +266,8 @@
         "Step 2: Verify the CLI terminal window comes to foreground"
       ],
       "passes": true,
-      "notes": "Completed 2026-04-12. Win32 SetForegroundWindow with Alt key trick."
+      "live_status": "complete",
+      "notes": "Completed 2026-04-12. Win32 SetForegroundWindow with Alt key trick. Requires launcher PID registration (sessions launched before 2026-04-15 update won't have PIDs)."
     },
     {
       "id": "F031",
@@ -270,6 +284,7 @@
         "Step 3: Scroll to bottom, verify auto-follow resumes"
       ],
       "passes": true,
+      "live_status": "complete",
       "notes": "Completed 2026-04-12. F037 regression fix applied but needs live verification."
     },
     {
@@ -287,6 +302,7 @@
         "Step 3: Verify name updates on card and sidebar"
       ],
       "passes": true,
+      "live_status": "complete",
       "notes": "Completed 2026-04-12."
     },
     {
@@ -303,6 +319,7 @@
         "Step 2: Verify start time appears on session card"
       ],
       "passes": true,
+      "live_status": "complete",
       "notes": "Completed 2026-04-12."
     },
     {
@@ -322,7 +339,8 @@
         "Step 7: Verify HTTP hooks are present in the cloud template (claude-settings.json)"
       ],
       "passes": true,
-      "notes": "CRITICAL FINDING: Launcher settings-sync.ts does a full overwrite of ~/.claude/settings.json from the cloud template. HTTP hooks must be added to the cloud template, not just injected locally. Two codebases affected: launcher (claude-workspace/launcher/) and Command Centre."
+      "live_status": "complete",
+      "notes": "LIVE. Installed launcher (npm global) has command-centre.js with ensureCommandCentre(). Health-checks port 4111, spawns detached if down. Cloud template has all 4 CC hooks. Server parent process IS the launcher. Earlier assessment was wrong — checked source repo instead of installed package."
     },
     {
       "id": "B002",
@@ -340,8 +358,9 @@
         "Step 4: Click 'Quick Launch' (advanced) — verify dashboard-managed session still works",
         "Step 5: Verify the modal clearly explains the difference between the two options"
       ],
-      "passes": true,
-      "notes": "Merges old F005 and F015. Primary path = launcher in terminal. Advanced path = dashboard-managed (existing F029 flow)."
+      "passes": false,
+      "live_status": "partial",
+      "notes": "Modal UI exists in dashboard (two-button design). Quick Launch (dashboard-managed) works. 'Open Launcher' button exists but depends on B001 launcher integration which is not deployed — launcher path resolution may fail. Needs live testing."
     },
     {
       "id": "B003",
@@ -359,8 +378,9 @@
         "Step 4: Reboot the machine — verify server starts automatically on login",
         "Step 5: Check server logs are being written to a file (not lost with terminal)"
       ],
-      "passes": true,
-      "notes": "Needs design decision on approach. pm2 is simplest but adds a dependency. node-windows creates a proper Windows service but is more complex."
+      "passes": false,
+      "live_status": "not_working",
+      "notes": "pm2 scripts added to package.json but pm2 is not installed or running. Server currently runs as a manual node process — dies if terminal closes, no auto-restart, no startup on boot, no log persistence."
     },
     {
       "id": "B004",
@@ -378,7 +398,8 @@
         "Step 6: Check Claude Code's stderr/stdout for any hook failure warnings"
       ],
       "passes": true,
-      "notes": "Mostly verification. May need to add a short timeout (e.g., 2s) to the HTTP hook config to prevent slowdown. Current setup has no explicit timeout on non-PreToolUse hooks."
+      "live_status": "complete",
+      "notes": "Claude Code hooks fail silently by design. Sessions work normally when CC is down. Verified by daily use — hooks don't block sessions."
     },
     {
       "id": "B005",
@@ -398,7 +419,8 @@
         "Step 6: Verify the dashboard handles 'cannot kill' gracefully with a helpful message"
       ],
       "passes": true,
-      "notes": "Dashboard-managed sessions are easy (ChildProcess.kill()). Terminal sessions are harder — need PID tracking or graceful 'go to terminal to stop' fallback."
+      "live_status": "complete",
+      "notes": "Kill button and confirmation modal in UI. Works for dashboard-managed sessions. Terminal sessions depend on PID tracking from launcher (only sessions launched after 2026-04-15 launcher update)."
     },
     {
       "id": "B006",
@@ -417,7 +439,8 @@
         "Step 5: Verify paused state is visually distinct (new status badge colour)"
       ],
       "passes": true,
-      "notes": "Feasibility TBC. Claude -p sessions are one-shot (prompt → response). 'Pause' may not be meaningful until Agent SDK is used. May need to descope to dashboard-managed only or defer entirely."
+      "live_status": "partial",
+      "notes": "Hold/resume UI exists. Auto-declines permissions when held. But claude -p is one-shot, so 'hold' only really works for preventing new prompts on dashboard-managed sessions. Terminal sessions show greyed-out hold state. Practical value limited until Agent SDK integration."
     },
     {
       "id": "B007",
@@ -438,7 +461,8 @@
         "Step 6: Verify cost estimates use current Claude pricing (input vs output tokens)"
       ],
       "passes": true,
-      "notes": "Need to investigate: where is token/cost data? Options: (a) transcript JSONL may have usage fields, (b) ~/.claude/projects/ session metadata, (c) hook payloads. Research needed before design."
+      "live_status": "partial",
+      "notes": "Token counts and cost shown on cards and metrics bar. Values are APPROXIMATIONS from transcript parsing — not actual API usage. See B010 for accurate replacement."
     },
     {
       "id": "B008",
@@ -457,8 +481,9 @@
         "Step 5: Verify sidebar collapses to hamburger menu",
         "Step 6: Test on both portrait and landscape orientations"
       ],
-      "passes": true,
-      "notes": "Server currently binds to localhost only. Need to add config option to bind to 0.0.0.0 or Tailscale IP. Security consideration: Tailscale is trusted, but should still be opt-in."
+      "passes": false,
+      "live_status": "not_working",
+      "notes": "Responsive CSS and mobile breakpoints exist in styles.css. But server binds to localhost (config.json host='localhost') — not reachable from any other device. Need to change config to 0.0.0.0 or Tailscale IP for mobile access to actually work. CSS untested on real mobile device."
     },
     {
       "id": "B009",
@@ -478,7 +503,29 @@
         "Step 6: Test with multiple file types (.ts, .json, .md, .png)"
       ],
       "passes": true,
-      "notes": "Only viable for dashboard-managed sessions. For terminal sessions, show 'drag to terminal' guidance instead. Need to decide: include file content inline in prompt, or reference by path?"
+      "live_status": "not_working",
+      "notes": "Drag-and-drop code exists in app.js (FileReader, drop zone overlay, content prepend). Dashboard-managed only. Not verified with live testing — may have edge cases with large files or binary types."
+    },
+    {
+      "id": "B010",
+      "category": "infrastructure",
+      "priority": "high",
+      "description": "Accurate token usage from CLI sessions. Replace the current approximation-based token counting in Command Centre with actual usage data sourced from Claude Code CLI. Investigate available data sources: transcript JSONL usage fields, session metadata in ~/.claude/projects/, hook payload extensions, or the claude --output-format json session summary. The metrics bar and session cards should show real input/output/cache token counts, not estimates.",
+      "design_status": "not_started",
+      "depends_on": [
+        "B007"
+      ],
+      "verification_steps": [
+        "Step 1: Start a Claude Code session with Command Centre running",
+        "Step 2: Let the session make several tool calls and API requests",
+        "Step 3: Compare the token count shown on the dashboard with the actual usage reported by Claude Code CLI (e.g., from transcript JSONL or session end summary)",
+        "Step 4: Verify input tokens, output tokens, and cache read/write tokens are broken down accurately",
+        "Step 5: Verify the cost calculation uses actual token counts, not approximations",
+        "Step 6: Verify aggregate metrics bar totals match the sum of individual session actuals"
+      ],
+      "passes": false,
+      "live_status": "not_started",
+      "notes": "B007 implemented token tracking but uses approximation. Need to research the exact data source for real token counts — likely the transcript JSONL files contain usage metadata per API call, or the session summary on exit has totals."
     }
   ]
 }

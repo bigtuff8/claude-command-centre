@@ -1,6 +1,16 @@
 export type SessionStatus = 'active' | 'waiting' | 'completed' | 'errored' | 'stopped' | 'held';
 export type SessionType = 'hook-monitored' | 'sdk-managed';
 
+export interface SessionUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  totalCostUSD: number;
+  model: string | null;
+  lastUpdated: Date | null;
+}
+
 export interface Session {
   id: string;
   name: string;
@@ -16,6 +26,8 @@ export interface Session {
   pendingPermission: PendingPermission | null;
   transcriptPath: string | null;
   terminalPid: number | null;
+  usage: SessionUsage;
+  autoApprove: boolean | null;
 }
 
 export interface HookEvent {
@@ -65,6 +77,9 @@ export interface AppConfig {
     sound: boolean;
   };
   autoPassTools: string[];
+  autoApproveAll: boolean;
+  autoApproveTools: string[];
+  launcherPath: string;
   maxEventsPerSession: number;
   maxTotalFeedEvents: number;
   openBrowser: boolean;
@@ -87,6 +102,8 @@ export interface SessionDTO {
     toolUseId: string;
     receivedAt: string;
   } | null;
+  usage: SessionUsage;
+  autoApprove: boolean | null;
 }
 
 export interface TranscriptMessageDTO {

@@ -420,6 +420,14 @@ select.form-input { cursor: pointer; }
 .status-dot.held { background: var(--amber); }
 .status-badge.held { background: var(--amber-dim); color: var(--amber); }
 
+/* === B017: AUTO-APPROVE SESSION TOGGLE === */
+.card-approve-btn { width: 24px; height: 24px; border: none; background: transparent; color: var(--text-muted); cursor: pointer; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 13px; transition: all 0.15s; flex-shrink: 0; margin-left: 4px; }
+.card-approve-btn:hover { background: var(--elevated); }
+.card-approve-btn.approve-on { color: var(--green); }
+.card-approve-btn.approve-off { color: var(--rose); }
+.card-approve-btn.approve-inherit-on { color: var(--green); opacity: 0.5; }
+.card-approve-btn.approve-inherit-off { color: var(--text-muted); opacity: 0.5; }
+
 /* === B009: DRAG AND DROP === */
 .transcript-body.drag-over { outline: 2px dashed var(--blue); outline-offset: -8px; background: var(--blue-dim); }
 .file-indicator { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--bg-card); border: 1px solid var(--border); border-bottom: none; font-size: 12px; color: var(--text-secondary); }

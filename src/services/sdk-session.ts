@@ -322,9 +322,23 @@ function handleStreamEvent(sessionId: string, event: any, _assistantBuffer: stri
         } as TranscriptMessageDTO,
       });
     }
-    if (event.total_cost_usd) {
-      console.log(`[SDK-Session] ${session.name} cost: $${event.total_cost_usd.toFixed(4)}`);
+
+    // B010: Capture accurate usage from CLI result event
+    if (event.total_cost_usd != null) {
+      session.usage.totalCostUSD += event.total_cost_usd;
     }
+    if (event.usage) {
+      session.usage.inputTokens += event.usage.input_tokens || 0;
+      session.usage.outputTokens += event.usage.output_tokens || 0;
+      session.usage.cacheReadTokens += event.usage.cache_read_input_tokens || 0;
+      session.usage.cacheCreationTokens += event.usage.cache_creation_input_tokens || 0;
+    }
+    if (event.modelUsage) {
+      session.usage.model = Object.keys(event.modelUsage)[0] || null;
+    }
+    session.usage.lastUpdated = new Date();
+    console.log(`[SDK-Session] ${session.name} cost: $${session.usage.totalCostUSD.toFixed(4)} (${session.usage.inputTokens + session.usage.outputTokens} tokens)`);
+    broadcastFn('session-usage', { sessionId, usage: session.usage });
     return;
   }
 }

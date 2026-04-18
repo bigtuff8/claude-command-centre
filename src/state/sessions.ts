@@ -1,4 +1,5 @@
 import { Session, SessionDTO, HookEvent, FeedEventDTO, AppConfig } from '../types';
+import { markDirty } from './persistence';
 
 const sessions = new Map<string, Session>();
 const feedEvents: FeedEventDTO[] = [];
@@ -43,8 +44,11 @@ export function getOrCreateSession(sessionId: string, cwd?: string, permissionMo
       pendingPermission: null,
       transcriptPath: null,
       terminalPid: null,
+      usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, totalCostUSD: 0, model: null, lastUpdated: null },
+      autoApprove: null,
     };
     sessions.set(sessionId, session);
+    markDirty();
   }
   if (cwd && !session.project) session.project = cwd;
   if (permissionMode) session.permissionMode = permissionMode;
@@ -68,6 +72,19 @@ export function removeSession(sessionId: string): boolean {
   return sessions.delete(sessionId);
 }
 
+export function getSessionsMap(): Map<string, Session> {
+  return sessions;
+}
+
+export function restoreSession(session: Session): void {
+  sessions.set(session.id, session);
+}
+
+export function restoreFeedEvents(events: FeedEventDTO[]): void {
+  feedEvents.length = 0;
+  feedEvents.push(...events);
+}
+
 export function createSdkSession(sessionId: string, cwd: string, name: string, permissionMode: string): Session {
   const session: Session = {
     id: sessionId,
@@ -84,8 +101,11 @@ export function createSdkSession(sessionId: string, cwd: string, name: string, p
     pendingPermission: null,
     transcriptPath: null,
     terminalPid: null,
+    usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, totalCostUSD: 0, model: null, lastUpdated: null },
+    autoApprove: null,
   };
   sessions.set(sessionId, session);
+  markDirty();
   return session;
 }
 
@@ -93,6 +113,7 @@ export function renameSession(sessionId: string, newName: string): Session | und
   const session = sessions.get(sessionId);
   if (session) {
     session.name = newName;
+    markDirty();
   }
   return session;
 }
@@ -103,6 +124,7 @@ export function addEvent(session: Session, event: HookEvent): void {
     session.events.shift();
   }
   session.lastActivity = new Date();
+  markDirty();
 }
 
 export function addFeedEvent(event: FeedEventDTO): void {
@@ -110,6 +132,7 @@ export function addFeedEvent(event: FeedEventDTO): void {
   if (feedEvents.length > config.maxTotalFeedEvents) {
     feedEvents.pop();
   }
+  markDirty();
 }
 
 export function getFeedEvents(): FeedEventDTO[] {
@@ -134,6 +157,8 @@ export function sessionToDTO(session: Session): SessionDTO {
       toolUseId: session.pendingPermission.toolUseId,
       receivedAt: session.pendingPermission.receivedAt.toISOString(),
     } : null,
+    usage: session.usage,
+    autoApprove: session.autoApprove,
   };
 }
 

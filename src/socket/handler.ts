@@ -1,10 +1,13 @@
 import { Server as SocketServer, Socket } from 'socket.io';
+import * as fs from 'fs';
 import { getSession, getAllSessions, sessionToDTO, getFeedEvents, removeSession, renameSession } from '../state/sessions';
 import { resolvePermission } from '../services/permission';
 import { spawnSession } from '../services/spawner';
 import { launchSdkSession, sendMessage, isProcessing, killSession } from '../services/sdk-session';
 import { startPolling, stopPolling } from '../services/transcript';
 import { focusTerminalWindow } from '../services/focus';
+import { getHooksConfig, setAutoApproveAll } from '../routes/hooks';
+import { getConfigPath } from '../config';
 
 export function initSocketHandler(io: SocketServer): void {
   io.on('connection', (socket: Socket) => {
@@ -12,9 +15,11 @@ export function initSocketHandler(io: SocketServer): void {
 
     // Send current state to newly connected client
     const sessions = getAllSessions().map(sessionToDTO);
+    const currentConfig = getHooksConfig();
     socket.emit('init', {
       sessions,
       feedEvents: getFeedEvents(),
+      autoApproveAll: currentConfig.autoApproveAll,
     });
 
     // Handle permission approval/denial from dashboard
@@ -233,6 +238,40 @@ export function initSocketHandler(io: SocketServer): void {
       session.status = 'completed';
       io.emit('session-updated', sessionToDTO(session));
       console.log(`[SDK-Session] ${session.name} ended by user`);
+    });
+
+    // B017: Global auto-approve toggle (no restart needed)
+    socket.on('set-global-auto-approve', (data: { enabled: boolean }) => {
+      setAutoApproveAll(data.enabled);
+      console.log(`[AutoApprove] Global auto-approve: ${data.enabled ? 'ON' : 'OFF'}`);
+
+      // Persist to config.json
+      try {
+        const configPath = getConfigPath();
+        const raw = fs.readFileSync(configPath, 'utf-8');
+        const configObj = JSON.parse(raw);
+        configObj.autoApproveAll = data.enabled;
+        fs.writeFileSync(configPath, JSON.stringify(configObj, null, 2), 'utf-8');
+      } catch (err: any) {
+        console.warn(`[AutoApprove] Failed to persist config: ${err.message}`);
+      }
+
+      io.emit('global-auto-approve-changed', { enabled: data.enabled });
+    });
+
+    // B017: Per-session auto-approve toggle
+    socket.on('set-session-auto-approve', (data: { sessionId: string; enabled: boolean | null }) => {
+      const session = getSession(data.sessionId);
+      if (!session) return;
+      session.autoApprove = data.enabled;
+      console.log(`[AutoApprove] Session ${session.name}: ${data.enabled === null ? 'inherit global' : data.enabled ? 'ON' : 'OFF'}`);
+      io.emit('session-updated', sessionToDTO(session));
+    });
+
+    // B017: Get current global auto-approve state
+    socket.on('get-auto-approve-state', () => {
+      const config = getHooksConfig();
+      socket.emit('auto-approve-state', { enabled: config.autoApproveAll });
     });
 
     socket.on('disconnect', () => {

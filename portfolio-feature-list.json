@@ -1,0 +1,372 @@
+{
+  "project": "Command Centre — Portfolio Management Extension",
+  "mode": "unconstrained",
+  "created": "2026-04-18",
+  "updated": "2026-04-18",
+  "phase": "1",
+  "parent_feature_list": "feature-list.json",
+  "features": [
+    {
+      "id": "P001",
+      "category": "data",
+      "priority": "critical",
+      "description": "Markdown parser service that extracts structured data from PROJECT_STATUS.md files. Parses: project name, status, last active date, quick context, current state, next steps. Handles variations in markdown formatting gracefully.",
+      "design_status": "not_started",
+      "depends_on": [],
+      "verification_steps": [
+        "Step 1: Point parser at 5 different real PROJECT_STATUS.md files from the portfolio",
+        "Step 2: Verify all return structured JSON with name, status, lastActive, quickContext fields",
+        "Step 3: Verify parser handles missing sections gracefully (returns null, not crash)",
+        "Step 4: Verify parser handles the 3+ formatting variations that exist across real project files"
+      ],
+      "passes": false,
+      "notes": "Foundation service — everything else depends on parsed project data"
+    },
+    {
+      "id": "P002",
+      "category": "data",
+      "priority": "critical",
+      "description": "Project scanner that walks configured root directories (Work, Personal), finds all project folders containing PROJECT_STATUS.md, and builds a portfolio index. Also detects: feature-list.json, DATA_DICTIONARY.md, review HTML files, .git presence, risk-register.md.",
+      "design_status": "not_started",
+      "depends_on": ["P001"],
+      "verification_steps": [
+        "Step 1: Run scanner against the real Work and Personal directories",
+        "Step 2: Verify it discovers all 39+ known active projects",
+        "Step 3: Verify each project entry includes: path, hasGit, hasFeatureList, hasDataDictionary, hasReviewHtml",
+        "Step 4: Verify scanner completes in under 5 seconds for the full portfolio",
+        "Step 5: Verify scanner handles inaccessible directories gracefully (e.g., OneDrive sync conflicts)"
+      ],
+      "passes": false,
+      "notes": "Root dirs: Work/ and Personal/ under OneDrive. Must handle OneDrive path quirks on Windows."
+    },
+    {
+      "id": "P003",
+      "category": "data",
+      "priority": "critical",
+      "description": "Portfolio state cache. In-memory cache of all parsed project data, refreshed on configurable interval (default 60s) or on file change detection. Follows the same pattern as existing session state persistence.",
+      "design_status": "not_started",
+      "depends_on": ["P001", "P002"],
+      "verification_steps": [
+        "Step 1: Start server — verify portfolio state is built on startup",
+        "Step 2: Modify a PROJECT_STATUS.md file — verify cache updates within the refresh interval",
+        "Step 3: Verify /api/portfolio/projects returns cached data (not re-scanning on every request)",
+        "Step 4: Verify cache rebuild completes in under 3 seconds"
+      ],
+      "passes": false,
+      "notes": "Pattern: scan on startup, refresh on interval. File watchers optional enhancement."
+    },
+    {
+      "id": "P004",
+      "category": "api",
+      "priority": "critical",
+      "description": "Portfolio API routes under /api/portfolio/. Endpoints: GET /projects (all projects with parsed status), GET /projects/:id (single project detail), GET /gates (projects at SteerCo gates), GET /activity (recent activity feed), GET /risks (risk register entries), GET /audit/data-dictionaries (dictionary compliance).",
+      "design_status": "not_started",
+      "depends_on": ["P003"],
+      "verification_steps": [
+        "Step 1: GET /api/portfolio/projects — returns JSON array of all projects with status fields",
+        "Step 2: GET /api/portfolio/gates — returns only projects with pending gate approvals",
+        "Step 3: GET /api/portfolio/activity — returns recent activity sorted by date descending",
+        "Step 4: GET /api/portfolio/risks — returns parsed risk register entries",
+        "Step 5: GET /api/portfolio/audit/data-dictionaries — returns per-project dictionary status",
+        "Step 6: All endpoints return valid JSON and handle empty states gracefully"
+      ],
+      "passes": false,
+      "notes": "Express routes added to existing server. Same auth model (none — local tool)."
+    },
+    {
+      "id": "P005",
+      "category": "ui",
+      "priority": "critical",
+      "description": "Portfolio board page showing all active projects as cards. Each card displays: project name, status badge, last active date, staleness indicator (green <7d, amber 7-21d, red >21d), quick context line. Cards are filterable by Work/Personal, status, staleness level, and has-pending-gate.",
+      "design_status": "not_started",
+      "depends_on": ["P004"],
+      "verification_steps": [
+        "Step 1: Navigate to portfolio view — verify all active projects appear as cards",
+        "Step 2: Verify each card shows name, status badge, last active, staleness colour, quick context",
+        "Step 3: Filter by 'Work' — verify only Work projects shown",
+        "Step 4: Filter by 'stale' (red) — verify only projects inactive >21 days shown",
+        "Step 5: Sort by last active — verify correct ordering",
+        "Step 6: Verify cards are responsive (stack on mobile, grid on desktop)"
+      ],
+      "passes": false,
+      "notes": "Primary view. This is what James sees first when opening the portfolio."
+    },
+    {
+      "id": "P006",
+      "category": "ui",
+      "priority": "critical",
+      "description": "Project detail panel. Clicking a project card opens a detail view showing: full PROJECT_STATUS.md content (rendered), feature list progress (X/Y complete with progress bar), recent git commits (last 10), session log entries, links to design artefacts.",
+      "design_status": "not_started",
+      "depends_on": ["P005"],
+      "verification_steps": [
+        "Step 1: Click a project card — verify detail panel opens",
+        "Step 2: Verify PROJECT_STATUS.md content is rendered (not raw markdown)",
+        "Step 3: Verify feature list progress bar shows correct count (e.g., 31/33 complete)",
+        "Step 4: Verify recent git commits are listed with date, author, message",
+        "Step 5: Verify session log entries from PROJECT_STATUS.md are displayed",
+        "Step 6: Verify detail panel works for projects WITH and WITHOUT feature lists"
+      ],
+      "passes": false,
+      "notes": "Git log requires shelling out to git. Feature list only shown if feature-list.json exists."
+    },
+    {
+      "id": "P007",
+      "category": "ui",
+      "priority": "critical",
+      "description": "SteerCo gate queue. Prominent section (top of portfolio or dedicated tab) showing projects currently at a governance gate. Each entry shows: project name, gate type (design/pre-deployment/strategic), when gate was reached, what document is waiting for review. Direct link to approval document (review HTML) if one exists.",
+      "design_status": "not_started",
+      "depends_on": ["P004", "P005"],
+      "verification_steps": [
+        "Step 1: Verify gate queue section is visible at top of portfolio view",
+        "Step 2: Verify it shows projects where status contains 'gate', 'review', or 'approval'",
+        "Step 3: Verify each entry shows project name, gate type, and date",
+        "Step 4: Click 'Open Review' on an entry with a review HTML — verify document opens in browser",
+        "Step 5: Verify gate queue is empty-state friendly ('No projects at gates' message)",
+        "Step 6: Verify gate detection works from PROJECT_STATUS.md parsing"
+      ],
+      "passes": false,
+      "notes": "Gate detection heuristic: parse status field and current state for gate-related keywords. Review HTML detection: glob for review.html, prototype/index.html in project folders."
+    },
+    {
+      "id": "P008",
+      "category": "integration",
+      "priority": "critical",
+      "description": "Session launching from portfolio. 'Launch Session' button on project cards and detail view. Opens a Claude Code session pointed at the project's working directory. Uses the existing Command Centre session spawner and launch-session socket event. Optionally pre-populates the opening message.",
+      "design_status": "not_started",
+      "depends_on": ["P005"],
+      "verification_steps": [
+        "Step 1: Click 'Launch Session' on a project card",
+        "Step 2: Verify a terminal opens with Claude Code running in the project's directory",
+        "Step 3: Verify the session appears on the Command Centre dashboard",
+        "Step 4: Click 'Launch Session' from project detail view — same result",
+        "Step 5: Verify the working directory is correct (not the CC directory)",
+        "Step 6: Test with both Work and Personal project paths"
+      ],
+      "passes": false,
+      "notes": "Reuses existing spawner service. Key challenge: resolving correct working directory from project path."
+    },
+    {
+      "id": "P009",
+      "category": "ui",
+      "priority": "high",
+      "description": "Activity feed showing recent activity across all projects. Sources: git commits (last N per repo), session log entries from PROJECT_STATUS.md files, Command Centre session history. Unified timeline sorted by date descending. Filterable by project.",
+      "design_status": "not_started",
+      "depends_on": ["P004"],
+      "verification_steps": [
+        "Step 1: Verify activity feed shows entries from multiple projects",
+        "Step 2: Verify git commits appear with project name, date, message",
+        "Step 3: Verify session log entries appear with project name and summary",
+        "Step 4: Verify entries are sorted by date (newest first)",
+        "Step 5: Filter by a specific project — verify only that project's activity shown",
+        "Step 6: Verify feed handles projects with no git history gracefully"
+      ],
+      "passes": false,
+      "notes": "Git log across 39+ repos could be slow. Consider limiting to repos with recent activity (modified in last 30 days)."
+    },
+    {
+      "id": "P010",
+      "category": "ui",
+      "priority": "high",
+      "description": "Risk register view. Parses steerco/risk-register.md and displays risks in a filterable table/card layout. Filter by: project, perspective (Finance/Security/Technical/etc), severity, status. Each risk shows: ID, description, perspective, severity, status, mitigation.",
+      "design_status": "not_started",
+      "depends_on": ["P004"],
+      "verification_steps": [
+        "Step 1: Navigate to risk register view",
+        "Step 2: Verify all risks from risk-register.md are displayed",
+        "Step 3: Filter by severity 'High' — verify only high-severity risks shown",
+        "Step 4: Filter by project — verify correct filtering",
+        "Step 5: Verify risk details are complete (ID, description, perspective, severity, status, mitigation)",
+        "Step 6: Verify empty state if risk register doesn't exist or is empty"
+      ],
+      "passes": false,
+      "notes": "Risk register is a markdown table. Parser must handle the specific format used in steerco/risk-register.md."
+    },
+    {
+      "id": "P011",
+      "category": "ui",
+      "priority": "high",
+      "description": "Risk register editing. James can accept, mitigate, or update risks directly from the portfolio UI. Changes write back to the risk-register.md file. Confirmation before write. Shows diff of what will change.",
+      "design_status": "not_started",
+      "depends_on": ["P010"],
+      "verification_steps": [
+        "Step 1: Click 'Edit' on a risk entry",
+        "Step 2: Change status from 'Open' to 'Mitigated' and add mitigation text",
+        "Step 3: Click save — verify confirmation dialog shows the change",
+        "Step 4: Confirm — verify risk-register.md file is updated correctly",
+        "Step 5: Refresh the view — verify the change persists",
+        "Step 6: Verify markdown formatting is preserved (no corruption of other entries)"
+      ],
+      "passes": false,
+      "notes": "Writing back to markdown is the tricky part. Must preserve formatting and not corrupt other entries."
+    },
+    {
+      "id": "P012",
+      "category": "ui",
+      "priority": "high",
+      "description": "Data dictionary audit view. Shows all projects with their DATA_DICTIONARY.md status: exists (yes/no), last modified date, staleness. Flags projects missing a data dictionary. Quick link to view the dictionary content.",
+      "design_status": "not_started",
+      "depends_on": ["P004"],
+      "verification_steps": [
+        "Step 1: Navigate to data dictionary audit view",
+        "Step 2: Verify all projects listed with dictionary status (present/missing)",
+        "Step 3: Verify last modified date shown for projects with dictionaries",
+        "Step 4: Verify stale dictionaries (>30 days) are flagged",
+        "Step 5: Verify missing dictionaries are prominently highlighted",
+        "Step 6: Click a dictionary entry — verify content is displayed or file opens"
+      ],
+      "passes": false,
+      "notes": "Simple audit — mostly file existence checks and stat() for modification dates."
+    },
+    {
+      "id": "P013",
+      "category": "ui",
+      "priority": "high",
+      "description": "Portfolio navigation. Tab or page-level navigation between: Sessions (existing dashboard), Portfolio Board, Activity Feed, Risk Register, Data Dictionary Audit. Consistent header/nav across all views.",
+      "design_status": "not_started",
+      "depends_on": ["P005"],
+      "verification_steps": [
+        "Step 1: Verify navigation tabs/links visible on all views",
+        "Step 2: Click each tab — verify correct view loads",
+        "Step 3: Verify Sessions tab shows existing dashboard (no regression)",
+        "Step 4: Verify URL changes reflect the current view (bookmarkable)",
+        "Step 5: Verify active tab is visually indicated",
+        "Step 6: Verify navigation works on mobile (hamburger or bottom tabs)"
+      ],
+      "passes": false,
+      "notes": "Decision needed at design: tabs within existing SPA or separate pages? Brief lists this as open question."
+    },
+    {
+      "id": "P014",
+      "category": "data",
+      "priority": "high",
+      "description": "PROJECT_REGISTRY.md parser. Extracts the project quick-reference table from PROJECT_REGISTRY.md into structured data. Cross-references with scanner results to identify projects in the registry but missing from disk (or vice versa).",
+      "design_status": "not_started",
+      "depends_on": ["P002"],
+      "verification_steps": [
+        "Step 1: Parse PROJECT_REGISTRY.md — verify all table rows extracted as structured objects",
+        "Step 2: Verify cross-reference identifies projects on disk but not in registry",
+        "Step 3: Verify cross-reference identifies projects in registry but not found on disk",
+        "Step 4: Verify parser handles the registry's markdown table format correctly"
+      ],
+      "passes": false,
+      "notes": "Registry uses markdown tables with specific columns. Parser must handle the known format."
+    },
+    {
+      "id": "P015",
+      "category": "data",
+      "priority": "high",
+      "description": "Git activity collector. For each project with a .git directory, runs git log to collect recent commits (last 10 or last 30 days). Returns structured data: hash, date, author, message. Handles repos that may not be accessible (OneDrive sync locks).",
+      "design_status": "not_started",
+      "depends_on": ["P002"],
+      "verification_steps": [
+        "Step 1: Collect git activity for 5 known projects with git repos",
+        "Step 2: Verify each returns structured commit data (hash, date, author, message)",
+        "Step 3: Verify projects without .git are skipped gracefully",
+        "Step 4: Verify collection completes in under 10 seconds for all repos",
+        "Step 5: Verify locked/inaccessible repos don't crash the collector"
+      ],
+      "passes": false,
+      "notes": "Shell out to git log. Parallelise across repos for speed."
+    },
+    {
+      "id": "P016",
+      "category": "integration",
+      "priority": "medium",
+      "description": "Approval document serving. Review HTML files in project folders are served via Express static routes or opened directly via file:// protocol. Gate queue items link to these documents. Supports: review.html, prototype/index.html, and similar naming patterns.",
+      "design_status": "not_started",
+      "depends_on": ["P007"],
+      "verification_steps": [
+        "Step 1: Verify scanner detects review HTML files in project folders",
+        "Step 2: Click 'Open Review' in gate queue — verify document opens in browser",
+        "Step 3: Verify document is interactive (not just displayed as raw HTML)",
+        "Step 4: Test with both review.html and prototype/index.html patterns",
+        "Step 5: Verify serving works for projects in both Work and Personal directories"
+      ],
+      "passes": false,
+      "notes": "Two approaches: serve via Express static route, or open file:// path. Brief lists this as open question."
+    },
+    {
+      "id": "P017",
+      "category": "integration",
+      "priority": "medium",
+      "description": "Real-time portfolio updates via Socket.io. Portfolio data pushed to connected clients when cache refreshes. New namespace or events under existing Socket.io connection. Follows same pattern as session updates.",
+      "design_status": "not_started",
+      "depends_on": ["P003", "P004"],
+      "verification_steps": [
+        "Step 1: Open portfolio view in browser",
+        "Step 2: Modify a PROJECT_STATUS.md file externally",
+        "Step 3: Verify portfolio view updates without manual page refresh",
+        "Step 4: Verify update arrives within cache refresh interval",
+        "Step 5: Verify multiple connected clients all receive the update"
+      ],
+      "passes": false,
+      "notes": "Emit portfolio:update event on cache refresh. Client listens and re-renders affected sections."
+    },
+    {
+      "id": "P018",
+      "category": "data",
+      "priority": "medium",
+      "description": "Feature list progress aggregator. For projects with feature-list.json, calculate completion metrics: total features, complete (passes:true), incomplete, percentage. Include in project card and detail view.",
+      "design_status": "not_started",
+      "depends_on": ["P002"],
+      "verification_steps": [
+        "Step 1: Parse Command Centre's feature-list.json — verify correct count of passes:true vs total",
+        "Step 2: Verify progress shown on project card (e.g., '31/33 features')",
+        "Step 3: Verify progress bar in detail view",
+        "Step 4: Verify projects without feature-list.json show 'No feature list' instead of 0/0"
+      ],
+      "passes": false,
+      "notes": "Simple JSON parse and count. Must handle both feature-list.json and portfolio-feature-list.json naming."
+    },
+    {
+      "id": "P019",
+      "category": "infrastructure",
+      "priority": "medium",
+      "description": "Portfolio configuration. Config section in config.json for portfolio settings: root directories to scan, refresh interval, staleness thresholds (green/amber/red days), max git commits per repo, enabled/disabled views.",
+      "design_status": "not_started",
+      "depends_on": [],
+      "verification_steps": [
+        "Step 1: Verify config.json has portfolio section with documented defaults",
+        "Step 2: Change refresh interval — verify scanner respects new interval",
+        "Step 3: Change staleness thresholds — verify card colours update accordingly",
+        "Step 4: Disable a view — verify it's hidden from navigation",
+        "Step 5: Add a custom root directory — verify scanner includes it"
+      ],
+      "passes": false,
+      "notes": "Extends existing config.json. Sensible defaults so it works out of the box."
+    },
+    {
+      "id": "P020",
+      "category": "infrastructure",
+      "priority": "medium",
+      "description": "Health monitoring: portfolio scanner health included in existing /healthz endpoint. Reports: last scan time, project count, any scan errors. Portfolio API endpoints included in health check.",
+      "design_status": "not_started",
+      "depends_on": ["P003", "P004"],
+      "verification_steps": [
+        "Step 1: GET /healthz — verify portfolio section in response (lastScan, projectCount, errors)",
+        "Step 2: Verify lastScan updates on each cache refresh",
+        "Step 3: Simulate a scan error (bad directory path) — verify error surfaces in healthz",
+        "Step 4: Verify all /api/portfolio/* endpoints are responsive"
+      ],
+      "passes": false,
+      "notes": "Monitoring feature. Extends existing healthz rather than adding a new endpoint."
+    },
+    {
+      "id": "P021",
+      "category": "infrastructure",
+      "priority": "medium",
+      "description": "Success criteria: portfolio usage tracking. Log when portfolio views are accessed, which views are used most, how often gate queue is checked. Metrics written to server logs for future analysis.",
+      "design_status": "not_started",
+      "depends_on": ["P004"],
+      "verification_steps": [
+        "Step 1: Access portfolio board — verify access logged",
+        "Step 2: Access risk register — verify access logged",
+        "Step 3: Click 'Launch Session' from portfolio — verify action logged",
+        "Step 4: Verify logs include timestamp, view name, and action type",
+        "Step 5: Verify metrics can be queried (e.g., 'which view is most used this week')"
+      ],
+      "passes": false,
+      "notes": "Success criteria feature. Lightweight logging, not a full analytics system."
+    }
+  ]
+}

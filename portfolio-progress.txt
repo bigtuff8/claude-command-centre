@@ -1,0 +1,28 @@
+=== Harness Session 2026-04-18 ===
+Mode: Unconstrained
+Brief: Review the portfolio design brief and build the portfolio management extension to Command Centre
+
+--- Initialisation ---
+Project type: Existing (Command Centre v0.2.0, 31 features complete)
+Extension: Portfolio Management (Phase 1)
+Standards loaded: N/A (unconstrained mode — vanilla JS/TS, Express, Socket.io)
+Features identified: 21 (0 complete, 21 to do)
+Design status: Brief exists (PORTFOLIO_DESIGN_BRIEF.md), no design spec or prototype yet
+Gaps identified:
+  - 21 modified + 6 untracked files uncommitted from prior session (2026-04-16/17)
+  - Open design questions listed in brief (single page vs tabs, git access method, etc.)
+  - Risk register format needs inspection to build parser
+  - PROJECT_STATUS.md format variation across projects needs sampling
+Feature list: portfolio-feature-list.json (separate from core feature-list.json)
+
+--- Designer ---
+[Not yet started]
+
+--- Developer ---
+[Not yet started]
+
+--- Tester ---
+[Not yet started]
+
+--- Release Manager ---
+[Not yet started]

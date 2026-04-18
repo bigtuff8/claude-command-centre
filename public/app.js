@@ -12,6 +12,7 @@ let transcriptAutoScroll = true;
 let transcriptLoaded = false;
 let sessionThinking = {}; // sessionId -> boolean
 let sessionUsage = {}; // sessionId -> { totalTokens, estimatedCostUSD }
+let globalAutoApprove = false;
 
 // === SOCKET EVENT HANDLERS ===
 socket.on('connect', () => {
@@ -25,7 +26,25 @@ socket.on('disconnect', () => {
 socket.on('init', (data) => {
   sessions = data.sessions || [];
   feedEvents = data.feedEvents || [];
+  if (data.autoApproveAll != null) globalAutoApprove = data.autoApproveAll;
   renderAll();
+  updateAutoApproveToggle();
+});
+
+socket.on('global-auto-approve-changed', (data) => {
+  globalAutoApprove = data.enabled;
+  updateAutoApproveToggle();
+});
+
+socket.on('session-usage', (data) => {
+  if (data.usage) {
+    const u = data.usage;
+    sessionUsage[data.sessionId] = {
+      totalTokens: (u.inputTokens || 0) + (u.outputTokens || 0) + (u.cacheReadTokens || 0),
+      estimatedCostUSD: u.totalCostUSD || 0,
+    };
+    renderSidebar();
+  }
 });
 
 socket.on('session-added', (session) => {
@@ -315,6 +334,7 @@ function renderGrid() {
           ((isCompleted || s.status === 'errored' || s.status === 'stopped') ? '<button class="btn-dismiss" onclick="event.stopPropagation(); dismissSession(\'' + s.id + '\')" title="Remove session">&times;</button>' : '') +
           (s.sessionType === 'sdk-managed' ? '<span class="sdk-badge" title="Dashboard-managed session">&#9000;</span>' : '') +
           (working ? '<div class="working-badge">Working</div>' : '<div class="status-badge ' + s.status + '">' + badgeText(s.status) + '</div>') +
+          ((s.status === 'active' || s.status === 'waiting') ? '<button class="card-approve-btn ' + getAutoApproveClass(s) + '" onclick="event.stopPropagation(); toggleSessionAutoApprove(\'' + s.id + '\')" title="' + getAutoApproveTitle(s) + '">' + getAutoApproveIcon(s) + '</button>' : '') +
           ((s.status === 'active' || s.status === 'waiting') ? '<button class="card-kill-btn" onclick="event.stopPropagation(); openKillModal(\'' + s.id + '\')" title="Stop session">&#9209;</button>' : '') +
         '</div>' +
       '</div>' +
@@ -565,7 +585,7 @@ function renderTranscript() {
   }
 
   // Only auto-scroll if user was already at bottom
-  if (wasAtBottom || transcriptAutoScroll) {
+  if (wasAtBottom) {
     body.scrollTop = body.scrollHeight;
   }
 }
@@ -793,6 +813,65 @@ function showToast(type, message) {
     toast.classList.add('dismissing');
     setTimeout(() => toast.remove(), 200);
   }, 4000);
+}
+
+// === B017: AUTO-APPROVE TOGGLE ===
+function updateAutoApproveToggle() {
+  let toggle = document.getElementById('autoApproveToggle');
+  if (!toggle) {
+    // Create the toggle in the metrics bar top-actions area
+    const actions = document.querySelector('.top-actions');
+    if (!actions) return;
+    toggle = document.createElement('button');
+    toggle.id = 'autoApproveToggle';
+    toggle.className = 'btn';
+    toggle.onclick = toggleGlobalAutoApprove;
+    actions.insertBefore(toggle, actions.firstChild);
+  }
+  toggle.innerHTML = globalAutoApprove
+    ? '<span style="color:var(--green)">&#10003;</span> Auto-Approve'
+    : '<span style="color:var(--text-muted)">&#10007;</span> Auto-Approve';
+  toggle.title = globalAutoApprove
+    ? 'Auto-approve is ON — all permissions auto-approved. Click to disable.'
+    : 'Auto-approve is OFF — permissions require manual approval. Click to enable.';
+}
+
+function getAutoApproveClass(s) {
+  if (s.autoApprove === true) return 'approve-on';
+  if (s.autoApprove === false) return 'approve-off';
+  return globalAutoApprove ? 'approve-inherit-on' : 'approve-inherit-off';
+}
+
+function getAutoApproveIcon(s) {
+  if (s.autoApprove === true) return '&#128274;';   // locked = forced on
+  if (s.autoApprove === false) return '&#128275;';   // unlocked = forced off
+  return '&#128274;';  // inherit = show lock state matching global
+}
+
+function getAutoApproveTitle(s) {
+  if (s.autoApprove === true) return 'Auto-approve: ON (override). Click to force OFF.';
+  if (s.autoApprove === false) return 'Auto-approve: OFF (override). Click to inherit global.';
+  return 'Auto-approve: inheriting global (' + (globalAutoApprove ? 'ON' : 'OFF') + '). Click to force ON.';
+}
+
+function toggleGlobalAutoApprove() {
+  globalAutoApprove = !globalAutoApprove;
+  socket.emit('set-global-auto-approve', { enabled: globalAutoApprove });
+  updateAutoApproveToggle();
+  showToast('info', 'Auto-approve ' + (globalAutoApprove ? 'enabled' : 'disabled'));
+}
+
+function toggleSessionAutoApprove(sessionId) {
+  const s = sessions.find(s => s.id === sessionId);
+  if (!s) return;
+  // Cycle: null (inherit) -> true (force on) -> false (force off) -> null
+  let next;
+  if (s.autoApprove === null) next = true;
+  else if (s.autoApprove === true) next = false;
+  else next = null;
+  s.autoApprove = next;
+  socket.emit('set-session-auto-approve', { sessionId, enabled: next });
+  renderAll();
 }
 
 // === NEW SESSION MODAL ===
