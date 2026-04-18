@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Signal Board — Command Centre</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --base: #09090b;
+    --card: #111113;
+    --card-hover: #1a1a1d;
+    --elevated: #1e1e21;
+    --border: #27272a;
+    --border-hover: #3f3f46;
+    --text-primary: #fafafa;
+    --text-secondary: #a1a1aa;
+    --text-muted: #71717a;
+    --blue: #3b82f6;
+    --green: #10b981;
+    --amber: #f59e0b;
+    --rose: #f43f5e;
+    --font: 'JetBrains Mono', monospace;
+    --sp: 4px;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--base);
+    color: var(--text-secondary);
+    font-family: var(--font);
+    font-size: 13px;
+    line-height: 1.4;
+    overflow: hidden;
+  }
+
+  /* LAYOUT */
+  .app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  /* TOP BAR */
+  .top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: calc(var(--sp)*3) calc(var(--sp)*5);
+    border-bottom: 1px solid var(--border);
+    background: var(--card);
+    flex-shrink: 0;
+    min-height: 48px;
+  }
+  .top-bar-left {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--sp)*4);
+  }
+  .top-bar-logo {
+    color: var(--green);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+  }
+  .top-bar-logo .dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    margin-right: calc(var(--sp)*2);
+    vertical-align: middle;
+    animation: pulse-green 2s ease-in-out infinite;
+  }
+  @keyframes pulse-green {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  .top-bar-metrics {
+    display: flex;
+    gap: calc(var(--sp)*6);
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+  .top-bar-metrics span { letter-spacing: 0.3px; }
+  .top-bar-metrics .metric-val { color: var(--text-secondary); }
+  .top-bar-right {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--sp)*3);
+  }
+  .top-btn {
+    background: var(--elevated);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-family: var(--font);
+    font-size: 11px;
+    padding: calc(var(--sp)*1.5) calc(var(--sp)*3);
+    cursor: pointer;
+    border-radius: 3px;
+    transition: all 0.15s;
+  }
+  .top-btn:hover {
+    border-color: var(--border-hover);
+    color: var(--text-secondary);
+  }
+
+  /* SEARCH BAR */
+  .search-bar {
+    display: flex;
+    align-items: center;
+    padding: calc(var(--sp)*2) calc(var(--sp)*5);
+    border-bottom: 1px solid var(--border);
+    background: var(--base);
+    flex-shrink: 0;
+  }
+  .search-prompt {
+    color: var(--text-muted);
+    margin-right: calc(var(--sp)*2);
+    font-size: 13px;
+  }
+  .search-input {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-primary);
+    font-family: var(--font);
+    font-size: 13px;
+    flex: 1;
+    caret-color: var(--green);
+  }
+  .search-input::placeholder { color: var(--text-muted); opacity: 0.5; }
+  .search-hint {
+    color: var(--text-muted);
+    font-size: 11px;
+    opacity: 0.5;
+  }
+
+  /* MAIN CONTENT */
+  .main-wrapper {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+  .table-area {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .table-area::-webkit-scrollbar { width: 6px; }
+  .table-area::-webkit-scrollbar-track { background: transparent; }
+  .table-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* SECTION HEADERS */
+  .section-header {
+    display: flex;
+    align-items: center;
+    padding: calc(var(--sp)*2) calc(var(--sp)*5);
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .section-header:hover { background: var(--card-hover); }
+  .section-chevron {
+    color: var(--text-muted);
+    margin-right: calc(var(--sp)*2);
+    font-size: 11px;
+    transition: transform 0.2s;
+    width: 16px;
+    text-align: center;
+  }
+  .section-header.collapsed .section-chevron { transform: rotate(-90deg); }
+  .section-title {
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+  .section-count {
+    color: var(--text-muted);
+    font-size: 11px;
+    margin-left: calc(var(--sp)*2);
+    opacity: 0.5;
+  }
+  .section-header.gate-header {
+    border-left: 3px solid var(--amber);
+    animation: gate-pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes gate-pulse {
+    0%, 100% { border-left-color: var(--amber); }
+    50% { border-left-color: transparent; }
+  }
+
+  /* TABLE */
+  .col-header-row {
+    display: grid;
+    grid-template-columns: 12px 200px 52px 96px 48px 72px 72px 40px 36px 1fr;
+    gap: 0;
+    padding: calc(var(--sp)*1.5) calc(var(--sp)*5);
+    border-bottom: 1px solid var(--border);
+    background: var(--base);
+    position: sticky;
+    top: 0;
+    z-index: 9;
+  }
+  .col-header-row span {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    opacity: 0.6;
+  }
+
+  .project-row {
+    display: grid;
+    grid-template-columns: 12px 200px 52px 96px 48px 72px 72px 40px 36px 1fr;
+    gap: 0;
+    padding: calc(var(--sp)*1.5) calc(var(--sp)*5);
+    border-bottom: 1px solid #18181b;
+    cursor: pointer;
+    transition: background 0.1s;
+    align-items: center;
+  }
+  .project-row:hover {
+    background: var(--card-hover);
+  }
+  .project-row.selected {
+    background: var(--elevated);
+    border-left: 2px solid var(--blue);
+    padding-left: calc(calc(var(--sp)*5) - 2px);
+  }
+  .project-row.gate-row {
+    border-left: 3px solid var(--amber);
+    padding-left: calc(calc(var(--sp)*5) - 3px);
+    background: rgba(245, 158, 11, 0.03);
+  }
+  .project-row.gate-row:hover {
+    background: rgba(245, 158, 11, 0.06);
+  }
+
+  .project-row span {
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* STATUS DOT */
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .dot-green { background: var(--green); }
+  .dot-amber { background: var(--amber); }
+  .dot-rose { background: var(--rose); }
+  .dot-grey { background: var(--text-muted); opacity: 0.4; }
+
+  .col-name { color: var(--text-primary); font-weight: 500; }
+  .col-type { color: var(--text-muted); font-size: 11px !important; }
+  .col-date { color: var(--text-muted); font-size: 11px !important; }
+  .col-days { color: var(--text-muted); font-size: 11px !important; text-align: right; padding-right: calc(var(--sp)*3); }
+  .col-gate { color: var(--text-muted); font-size: 11px !important; }
+  .col-gate.has-gate { color: var(--amber); }
+  .col-features { color: var(--text-muted); font-size: 11px !important; }
+  .col-risks { color: var(--text-muted); font-size: 11px !important; text-align: center; }
+  .col-risks.has-risks { color: var(--rose); font-weight: 600; }
+  .col-dict { font-size: 11px !important; text-align: center; }
+  .dict-yes { color: var(--green); }
+  .dict-no { color: var(--text-muted); opacity: 0.3; }
+
+  /* GATE BADGE */
+  .gate-badge {
+    display: inline-block;
+    font-size: 10px !important;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: var(--amber);
+    animation: badge-blink 2s ease-in-out infinite;
+  }
+  @keyframes badge-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* HEAT TRAIL */
+  .heat-trail {
+    display: flex;
+    gap: 1px;
+    align-items: center;
+    padding-left: calc(var(--sp)*2);
+  }
+  .heat-cell {
+    width: 4px;
+    height: 12px;
+    border-radius: 1px;
+    transition: opacity 0.2s;
+  }
+
+  /* SECTION CONTENT */
+  .section-content { overflow: hidden; transition: max-height 0.3s ease; }
+  .section-content.collapsed { max-height: 0 !important; overflow: hidden; }
+
+  /* DETAIL PANEL */
+  .detail-panel {
+    width: 0;
+    overflow: hidden;
+    background: var(--card);
+    border-left: 1px solid var(--border);
+    transition: width 0.25s ease;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .detail-panel.open { width: 440px; }
+  .detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: calc(var(--sp)*4) calc(var(--sp)*5);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .detail-title {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .detail-close {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-family: var(--font);
+    font-size: 11px;
+    padding: calc(var(--sp)) calc(var(--sp)*2);
+    cursor: pointer;
+    border-radius: 3px;
+  }
+  .detail-close:hover { color: var(--text-secondary); border-color: var(--border-hover); }
+  .detail-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: calc(var(--sp)*4) calc(var(--sp)*5);
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .detail-body::-webkit-scrollbar { width: 6px; }
+  .detail-body::-webkit-scrollbar-track { background: transparent; }
+  .detail-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .detail-section {
+    margin-bottom: calc(var(--sp)*5);
+  }
+  .detail-section-title {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: calc(var(--sp)*2);
+    padding-bottom: calc(var(--sp));
+    border-bottom: 1px solid #1e1e21;
+  }
+  .detail-meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: calc(var(--sp)*2);
+    font-size: 12px;
+  }
+  .detail-meta-item label {
+    display: block;
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  .detail-meta-item span { color: var(--text-primary); }
+
+  .detail-status-content {
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    background: var(--base);
+    padding: calc(var(--sp)*3);
+    border-radius: 3px;
+    border: 1px solid #1e1e21;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .detail-commits {
+    list-style: none;
+    font-size: 11px;
+  }
+  .detail-commits li {
+    padding: calc(var(--sp)*1.5) 0;
+    border-bottom: 1px solid #1e1e21;
+    display: flex;
+    gap: calc(var(--sp)*2);
+  }
+  .commit-hash { color: var(--blue); font-size: 11px; }
+  .commit-msg { color: var(--text-secondary); }
+  .commit-date { color: var(--text-muted); margin-left: auto; white-space: nowrap; }
+
+  .detail-features {
+    list-style: none;
+    font-size: 12px;
+  }
+  .detail-features li {
+    padding: calc(var(--sp)) 0;
+    display: flex;
+    align-items: center;
+    gap: calc(var(--sp)*2);
+  }
+  .feat-done { color: var(--green); }
+  .feat-pending { color: var(--text-muted); opacity: 0.4; }
+  .feat-text-done { color: var(--text-secondary); }
+  .feat-text-pending { color: var(--text-muted); }
+
+  .launch-btn {
+    display: block;
+    width: 100%;
+    padding: calc(var(--sp)*2.5) 0;
+    background: var(--elevated);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 3px;
+    text-align: center;
+    transition: all 0.15s;
+    margin-top: calc(var(--sp)*4);
+  }
+  .launch-btn:hover {
+    background: var(--blue);
+    border-color: var(--blue);
+    color: #fff;
+  }
+
+  /* BOTTOM BAR */
+  .bottom-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: calc(var(--sp)*1.5) calc(var(--sp)*5);
+    border-top: 1px solid var(--border);
+    background: var(--card);
+    font-size: 11px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    min-height: 32px;
+  }
+  .bottom-bar-left { display: flex; gap: calc(var(--sp)*4); }
+  .bottom-bar-left span .num { color: var(--text-secondary); }
+  .bottom-bar-right {
+    display: flex;
+    gap: calc(var(--sp)*4);
+    opacity: 0.5;
+  }
+  .kbd {
+    display: inline-block;
+    background: var(--elevated);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 0 4px;
+    font-size: 10px;
+    font-family: var(--font);
+    line-height: 18px;
+    color: var(--text-muted);
+  }
+
+  /* Focus indicator for keyboard nav */
+  .project-row.focused {
+    background: var(--card-hover);
+    outline: 1px solid var(--border-hover);
+    outline-offset: -1px;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- TOP BAR -->
+  <div class="top-bar">
+    <div class="top-bar-left">
+      <span class="top-bar-logo"><span class="dot"></span>COMMAND CENTRE</span>
+      <div class="top-bar-metrics">
+        <span>PROJECTS: <span class="metric-val">16</span></span>
+        <span>ACTIVE: <span class="metric-val">6</span></span>
+        <span>STALE: <span class="metric-val">3</span></span>
+        <span>GATES: <span class="metric-val" style="color:var(--amber)">2</span></span>
+        <span>RISKS: <span class="metric-val" style="color:var(--rose)">1</span></span>
+      </div>
+    </div>
+    <div class="top-bar-right">
+      <button class="top-btn"><span class="kbd">Ctrl+K</span></button>
+      <button class="top-btn">+ NEW</button>
+    </div>
+  </div>
+
+  <!-- SEARCH BAR -->
+  <div class="search-bar">
+    <span class="search-prompt">&gt;</span>
+    <input class="search-input" type="text" placeholder="search projects..." id="searchInput">
+    <span class="search-hint">/ to focus</span>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main-wrapper">
+    <div class="table-area" id="tableArea">
+
+      <!-- COL HEADERS -->
+      <div class="col-header-row">
+        <span></span>
+        <span>NAME</span>
+        <span>TYPE</span>
+        <span>LAST ACTIVE</span>
+        <span style="text-align:right;padding-right:12px">AGE</span>
+        <span>GATE</span>
+        <span>FEATURES</span>
+        <span style="text-align:center">RSK</span>
+        <span style="text-align:center">DCT</span>
+        <span style="padding-left:8px">ACTIVITY 30D</span>
+      </div>
+
+      <!-- GATE QUEUE -->
+      <div class="section-header gate-header" data-section="gates">
+        <span class="section-chevron">&#9662;</span>
+        <span class="section-title">GATE QUEUE</span>
+        <span class="section-count">2</span>
+      </div>
+      <div class="section-content" id="section-gates"></div>
+
+      <!-- WORK -->
+      <div class="section-header" data-section="work">
+        <span class="section-chevron">&#9662;</span>
+        <span class="section-title">WORK</span>
+        <span class="section-count">8</span>
+      </div>
+      <div class="section-content" id="section-work"></div>
+
+      <!-- PERSONAL -->
+      <div class="section-header" data-section="personal">
+        <span class="section-chevron">&#9662;</span>
+        <span class="section-title">PERSONAL</span>
+        <span class="section-count">6</span>
+      </div>
+      <div class="section-content" id="section-personal"></div>
+
+    </div>
+
+    <!-- DETAIL PANEL -->
+    <div class="detail-panel" id="detailPanel">
+      <div class="detail-header">
+        <span class="detail-title" id="detailTitle"></span>
+        <button class="detail-close" id="detailClose">ESC</button>
+      </div>
+      <div class="detail-body" id="detailBody"></div>
+    </div>
+  </div>
+
+  <!-- BOTTOM BAR -->
+  <div class="bottom-bar">
+    <div class="bottom-bar-left">
+      <span><span class="num">16</span> projects</span>
+      <span><span class="num">6</span> active</span>
+      <span><span class="num">3</span> stale</span>
+      <span><span class="num">2</span> gates</span>
+    </div>
+    <div class="bottom-bar-right">
+      <span><span class="kbd">j</span>/<span class="kbd">k</span> navigate</span>
+      <span><span class="kbd">/</span> search</span>
+      <span><span class="kbd">Enter</span> open</span>
+      <span><span class="kbd">Esc</span> close</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------- DATA ----------
+const TODAY = new Date(2026, 3, 18); // 2026-04-18
+
+function daysAgo(dateStr) {
+  const d = new Date(dateStr);
+  return Math.floor((TODAY - d) / 86400000);
+}
+
+function dotClass(days) {
+  if (days < 7) return 'dot-green';
+  if (days <= 21) return 'dot-amber';
+  return 'dot-rose';
+}
+
+// Heat trail generator: array of 30 values 0-1
+function heatPattern(daysAgoVal, isActive) {
+  const cells = [];
+  const seed = daysAgoVal * 7 + (isActive ? 3 : 17);
+  function rng(i) { return ((Math.sin(seed + i * 127.1) * 43758.5453) % 1 + 1) % 1; }
+  for (let i = 29; i >= 0; i--) {
+    if (i < daysAgoVal) {
+      cells.push(0);
+    } else if (i - daysAgoVal < 3 && isActive) {
+      cells.push(0.6 + rng(i) * 0.4);
+    } else {
+      const decay = Math.max(0, 1 - (i / 30));
+      const v = rng(i) * decay * (isActive ? 0.7 : 0.3);
+      cells.push(v > 0.15 ? v : 0);
+    }
+  }
+  return cells.reverse();
+}
+
+const gateProjects = [
+  { name: 'Holiday System', type: 'Work', lastActive: '2026-04-15', gate: 'Design Gate', gateStatus: 'REVIEW WAITING', features: '12/18', risks: 1, dict: true,
+    status: `Status: Active\nCurrent State: Design phase complete. Holiday request workflow, approval chain, and calendar integration designed. Awaiting SteerCo design gate review.\n\nNext Steps:\n- SteerCo design review\n- Implement request submission form\n- Build approval workflow engine\n- Calendar sync with Outlook`,
+    commits: [{h:'a3f91b2',m:'Add approval chain diagram',d:'Apr 15'},{h:'8c2e4d1',m:'Complete data model design',d:'Apr 14'},{h:'f1a7b33',m:'Initial project scaffold',d:'Apr 12'}],
+    featureList: [{t:'Request submission form',done:true},{t:'Approval workflow',done:true},{t:'Calendar integration',done:true},{t:'Email notifications',done:true},{t:'Manager dashboard',done:false},{t:'Reporting',done:false}]
+  },
+  { name: 'Zendesk Integration', type: 'Work', lastActive: '2026-04-17', gate: 'Pre-deploy', gateStatus: 'REVIEW WAITING', features: '22/24', risks: 0, dict: true,
+    status: `Status: Active\nCurrent State: All features implemented and tested. Playwright test suite passing (47 tests). Awaiting pre-deployment gate review before pushing to production.\n\nNext Steps:\n- SteerCo pre-deployment review\n- Production deployment\n- Post-deployment monitoring setup`,
+    commits: [{h:'d4e8f21',m:'Fix ticket status sync edge case',d:'Apr 17'},{h:'b2c1a09',m:'Add Playwright regression suite',d:'Apr 16'},{h:'91f3e7c',m:'Implement webhook retry logic',d:'Apr 15'}],
+    featureList: [{t:'Ticket creation',done:true},{t:'Status sync',done:true},{t:'Webhook handler',done:true},{t:'Retry logic',done:true},{t:'Dashboard widget',done:false},{t:'SLA tracking',done:false}]
+  }
+];
+
+const workProjects = [
+  { name: 'Command Centre', type: 'Work', lastActive: '2026-04-17', gate: null, features: '31/33', risks: 1, dict: true,
+    status: `Status: Active\nCurrent State: Portfolio dashboard operational. Direction prototypes in progress. 31 of 33 planned features complete.\n\nNext Steps:\n- Complete direction prototype comparison\n- SteerCo review of chosen direction\n- Implement chosen design`,
+    commits: [{h:'e7f2a11',m:'Add signal board prototype',d:'Apr 17'},{h:'c3d9b22',m:'Refactor metrics calculation',d:'Apr 16'},{h:'a1b5c33',m:'Fix stale project detection',d:'Apr 15'}],
+    featureList: [{t:'Project registry parsing',done:true},{t:'Status aggregation',done:true},{t:'Gate tracking',done:true},{t:'Risk register',done:false},{t:'Activity heatmap',done:false}]
+  },
+  { name: 'Thingsboard Integration', type: 'Work', lastActive: '2026-04-14', gate: null, features: '5/15', risks: 0, dict: true,
+    status: `Status: Active\nCurrent State: Basic device telemetry pipeline established. 5 of 15 features implemented.\n\nNext Steps:\n- Alert rule engine\n- Dashboard widgets\n- Historical data queries`,
+    commits: [{h:'f2a3b44',m:'Add MQTT connection pool',d:'Apr 14'},{h:'d1e2f55',m:'Implement device registry',d:'Apr 12'}],
+    featureList: [{t:'MQTT connection',done:true},{t:'Device registry',done:true},{t:'Telemetry pipeline',done:true},{t:'Alert rules',done:false},{t:'Dashboard widgets',done:false}]
+  },
+  { name: 'ITSM', type: 'Work', lastActive: '2026-04-12', gate: null, features: '8/20', risks: 0, dict: false,
+    status: `Status: Active\nCurrent State: Core ticketing system operational. Knowledge base integration in progress.\n\nNext Steps:\n- Knowledge base search\n- SLA tracking dashboard\n- Create DATA_DICTIONARY.md`,
+    commits: [{h:'a9b8c77',m:'Add ticket categorisation',d:'Apr 12'},{h:'e3f4a88',m:'Fix assignment logic',d:'Apr 10'}],
+    featureList: [{t:'Ticket CRUD',done:true},{t:'Assignment logic',done:true},{t:'Categories',done:true},{t:'SLA tracking',done:false},{t:'Knowledge base',done:false}]
+  },
+  { name: 'IOT Admin', type: 'Work', lastActive: '2026-03-10', gate: null, features: '0/12', risks: 0, dict: false,
+    status: `Status: Paused\nCurrent State: Requirements gathered, no development started.\n\nNext Steps:\n- Architecture design\n- Create project scaffold`,
+    commits: [{h:'b1c2d99',m:'Initial requirements doc',d:'Mar 10'}],
+    featureList: []
+  },
+  { name: 'Figma Integration', type: 'Work', lastActive: '2026-03-02', gate: null, features: '3/8', risks: 0, dict: true,
+    status: `Status: Paused\nCurrent State: Design token sync working. Component library mapping incomplete.\n\nNext Steps:\n- Resume component mapping\n- Auto-export pipeline`,
+    commits: [{h:'c2d3e00',m:'Add token sync logic',d:'Mar 02'}],
+    featureList: [{t:'Token sync',done:true},{t:'Component mapping',done:false},{t:'Auto-export',done:false}]
+  },
+  { name: 'HR System', type: 'Work', lastActive: '2026-02-28', gate: null, features: null, risks: 0, dict: false,
+    status: `Status: Planning\nCurrent State: Initial scoping complete. Waiting for requirements sign-off.\n\nNext Steps:\n- Requirements gate\n- Architecture design`,
+    commits: [{h:'d3e4f11',m:'Add scope document',d:'Feb 28'}],
+    featureList: []
+  },
+  { name: 'FM System', type: 'Work', lastActive: '2026-01-15', gate: null, features: null, risks: 0, dict: false,
+    status: `Status: Paused\nCurrent State: Early planning. Deprioritised in favour of Holiday System.\n\nNext Steps:\n- Revisit after Q2`,
+    commits: [{h:'e4f5a22',m:'Initial planning notes',d:'Jan 15'}],
+    featureList: []
+  },
+  { name: 'Sickness System', type: 'Work', lastActive: '2026-03-20', gate: null, features: null, risks: 0, dict: false,
+    status: `Status: Active\nCurrent State: Requirements gathering phase. Integration points with HR system identified.\n\nNext Steps:\n- Complete requirements\n- Design data model`,
+    commits: [{h:'f5a6b33',m:'Document integration points',d:'Mar 20'}],
+    featureList: []
+  }
+];
+
+const personalProjects = [
+  { name: 'family-hub', type: 'Pers', lastActive: '2026-04-16', gate: null, features: null, risks: 0, dict: true,
+    status: `Status: Active\nCurrent State: Family dashboard running on Pi. Calendar and meal planning features live.\n\nNext Steps:\n- Shopping list integration\n- Photo gallery widget`,
+    commits: [{h:'a1b1c11',m:'Fix calendar timezone bug',d:'Apr 16'},{h:'b2c2d22',m:'Add meal plan randomiser',d:'Apr 14'}],
+    featureList: []
+  },
+  { name: 'outlook-mcp', type: 'Pers', lastActive: '2026-04-15', gate: null, features: null, risks: 0, dict: false,
+    status: `Status: Active\nCurrent State: MCP server operational. Email read/send working. Calendar events functional.\n\nNext Steps:\n- Add attachment support\n- Improve error handling`,
+    commits: [{h:'c3d3e33',m:'Add calendar event creation',d:'Apr 15'},{h:'d4e4f44',m:'Fix auth token refresh',d:'Apr 13'}],
+    featureList: []
+  },
+  { name: 'Happy Coder', type: 'Pers', lastActive: '2026-04-16', gate: null, features: null, risks: 0, dict: false,
+    status: `Status: Active\nCurrent State: VS Code extension prototype working. Mood tracking and break reminders functional.\n\nNext Steps:\n- Publish to marketplace\n- Add productivity insights`,
+    commits: [{h:'e5f5a55',m:'Add break reminder notifications',d:'Apr 16'}],
+    featureList: []
+  },
+  { name: 'claude-workspace', type: 'Pers', lastActive: '2026-04-17', gate: null, features: null, risks: 0, dict: false,
+    status: `Status: Active\nCurrent State: Launcher and session management working. Standards sync from poc-template operational.\n\nNext Steps:\n- Add session metrics\n- Improve launcher UX`,
+    commits: [{h:'f6a6b66',m:'Update launcher config',d:'Apr 17'}],
+    featureList: []
+  },
+  { name: 'CIR', type: 'Pers', lastActive: '2026-04-14', gate: null, features: null, risks: 0, dict: true,
+    status: `Status: Active\nCurrent State: Central Integration Repository up to date. All service addresses and credentials documented.\n\nNext Steps:\n- Add Thingsboard credentials\n- Audit for stale entries`,
+    commits: [{h:'a7b7c77',m:'Add Zendesk webhook config',d:'Apr 14'}],
+    featureList: []
+  },
+  { name: 'Kia Complaint', type: 'Pers', lastActive: '2026-04-10', gate: null, features: null, risks: 0, dict: false,
+    status: `Status: Active\nCurrent State: Complaint letter drafted and sent. Awaiting response.\n\nNext Steps:\n- Follow up if no response by Apr 24\n- Escalate to ombudsman if needed`,
+    commits: [{h:'b8c8d88',m:'Finalise complaint letter',d:'Apr 10'}],
+    featureList: []
+  }
+];
+
+// ---------- RENDERING ----------
+function renderHeatTrail(project) {
+  const da = daysAgo(project.lastActive);
+  const isActive = da < 7;
+  const pattern = heatPattern(da, isActive);
+  const baseColor = isActive ? [16, 185, 129] : (da <= 21 ? [245, 158, 11] : [244, 63, 94]);
+  return pattern.map(v => {
+    if (v === 0) return `<div class="heat-cell" style="background:rgba(255,255,255,0.03)"></div>`;
+    const [r,g,b] = baseColor;
+    return `<div class="heat-cell" style="background:rgba(${r},${g},${b},${(v * 0.7 + 0.1).toFixed(2)})"></div>`;
+  }).join('');
+}
+
+function renderRow(project, isGate) {
+  const da = daysAgo(project.lastActive);
+  const dc = dotClass(da);
+  const dateStr = project.lastActive.slice(5); // MM-DD
+  const daysStr = da === 0 ? '0d' : da + 'd';
+  const featStr = project.features || '\u2014';
+  const riskCls = project.risks > 0 ? 'col-risks has-risks' : 'col-risks';
+  const dictHtml = project.dict ? '<span class="dict-yes">\u2713</span>' : '<span class="dict-no">\u2717</span>';
+  const gateCls = isGate ? ' gate-row' : '';
+  let gateHtml = '\u2014';
+  if (isGate && project.gateStatus) {
+    gateHtml = `<span class="gate-badge">${project.gateStatus}</span>`;
+  }
+
+  return `<div class="project-row${gateCls}" data-name="${project.name}">
+    <span><span class="status-dot ${dc}"></span></span>
+    <span class="col-name">${project.name}</span>
+    <span class="col-type">${project.type}</span>
+    <span class="col-date">${dateStr}</span>
+    <span class="col-days">${daysStr}</span>
+    <span class="col-gate${isGate ? ' has-gate' : ''}">${gateHtml}</span>
+    <span class="col-features">${featStr}</span>
+    <span class="${riskCls}">${project.risks}</span>
+    <span class="col-dict">${dictHtml}</span>
+    <span class="heat-trail">${renderHeatTrail(project)}</span>
+  </div>`;
+}
+
+function renderDetail(project) {
+  const da = daysAgo(project.lastActive);
+  const dc = dotClass(da);
+
+  let featHtml = '';
+  if (project.featureList && project.featureList.length > 0) {
+    featHtml = `<div class="detail-section">
+      <div class="detail-section-title">FEATURES</div>
+      <ul class="detail-features">
+        ${project.featureList.map(f => `<li><span class="${f.done ? 'feat-done' : 'feat-pending'}">${f.done ? '\u2713' : '\u25cb'}</span> <span class="${f.done ? 'feat-text-done' : 'feat-text-pending'}">${f.t}</span></li>`).join('')}
+      </ul>
+    </div>`;
+  }
+
+  let gateHtml = '';
+  if (project.gate) {
+    gateHtml = `<div class="detail-section">
+      <div class="detail-section-title">GATE</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span class="gate-badge">${project.gateStatus}</span>
+        <span style="color:var(--text-muted);font-size:11px">${project.gate}</span>
+      </div>
+      <button class="launch-btn" style="margin-top:0;background:rgba(245,158,11,0.1);border-color:var(--amber);color:var(--amber)">Open Review Document</button>
+    </div>`;
+  }
+
+  return `
+    <div class="detail-section">
+      <div class="detail-section-title">OVERVIEW</div>
+      <div class="detail-meta">
+        <div class="detail-meta-item"><label>Type</label><span>${project.type}</span></div>
+        <div class="detail-meta-item"><label>Last Active</label><span>${project.lastActive}</span></div>
+        <div class="detail-meta-item"><label>Status</label><span><span class="status-dot ${dc}" style="margin-right:6px"></span>${da}d ago</span></div>
+        <div class="detail-meta-item"><label>Features</label><span>${project.features || '\u2014'}</span></div>
+        <div class="detail-meta-item"><label>Risks</label><span style="color:${project.risks > 0 ? 'var(--rose)' : 'var(--text-muted)'}">${project.risks}</span></div>
+        <div class="detail-meta-item"><label>Dictionary</label><span>${project.dict ? '\u2713 Present' : '\u2717 Missing'}</span></div>
+      </div>
+    </div>
+    ${gateHtml}
+    <div class="detail-section">
+      <div class="detail-section-title">PROJECT STATUS</div>
+      <div class="detail-status-content">${project.status}</div>
+    </div>
+    ${featHtml}
+    <div class="detail-section">
+      <div class="detail-section-title">RECENT COMMITS</div>
+      <ul class="detail-commits">
+        ${(project.commits || []).map(c => `<li><span class="commit-hash">${c.h}</span><span class="commit-msg">${c.m}</span><span class="commit-date">${c.d}</span></li>`).join('')}
+      </ul>
+    </div>
+    <button class="launch-btn">Launch Session</button>
+  `;
+}
+
+// Populate sections
+document.getElementById('section-gates').innerHTML = gateProjects.map(p => renderRow(p, true)).join('');
+document.getElementById('section-work').innerHTML = workProjects.map(p => renderRow(p, false)).join('');
+document.getElementById('section-personal').innerHTML = personalProjects.map(p => renderRow(p, false)).join('');
+
+// ---------- INTERACTIONS ----------
+const allProjects = [...gateProjects, ...workProjects, ...personalProjects];
+const allProjectMap = {};
+allProjects.forEach(p => allProjectMap[p.name] = p);
+
+const detailPanel = document.getElementById('detailPanel');
+const detailTitle = document.getElementById('detailTitle');
+const detailBody = document.getElementById('detailBody');
+const detailClose = document.getElementById('detailClose');
+
+let selectedRow = null;
+let focusedIndex = -1;
+
+function getAllVisibleRows() {
+  return Array.from(document.querySelectorAll('.project-row')).filter(r => {
+    const section = r.closest('.section-content');
+    return !section.classList.contains('collapsed');
+  });
+}
+
+function selectRow(row) {
+  if (selectedRow) selectedRow.classList.remove('selected');
+  selectedRow = row;
+  if (row) {
+    row.classList.add('selected');
+    const name = row.dataset.name;
+    const project = allProjectMap[name];
+    if (project) {
+      detailTitle.textContent = project.name;
+      detailBody.innerHTML = renderDetail(project);
+      detailPanel.classList.add('open');
+    }
+  }
+}
+
+function closePanel() {
+  detailPanel.classList.remove('open');
+  if (selectedRow) selectedRow.classList.remove('selected');
+  selectedRow = null;
+}
+
+// Row clicks
+document.addEventListener('click', (e) => {
+  const row = e.target.closest('.project-row');
+  if (row) {
+    selectRow(row);
+    const rows = getAllVisibleRows();
+    focusedIndex = rows.indexOf(row);
+    return;
+  }
+});
+
+detailClose.addEventListener('click', closePanel);
+
+// Section collapse
+document.querySelectorAll('.section-header').forEach(header => {
+  header.addEventListener('click', () => {
+    header.classList.toggle('collapsed');
+    const sectionId = 'section-' + header.dataset.section;
+    const content = document.getElementById(sectionId);
+    content.classList.toggle('collapsed');
+  });
+});
+
+// Keyboard navigation
+const searchInput = document.getElementById('searchInput');
+
+document.addEventListener('keydown', (e) => {
+  // Don't intercept if typing in search
+  if (document.activeElement === searchInput && e.key !== 'Escape') return;
+
+  const rows = getAllVisibleRows();
+
+  if (e.key === '/') {
+    e.preventDefault();
+    searchInput.focus();
+    return;
+  }
+  if (e.key === 'Escape') {
+    if (document.activeElement === searchInput) {
+      searchInput.blur();
+      searchInput.value = '';
+      filterRows('');
+      return;
+    }
+    closePanel();
+    return;
+  }
+  if (e.key === 'j' || e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (rows.length === 0) return;
+    // Remove old focus
+    rows.forEach(r => r.classList.remove('focused'));
+    focusedIndex = Math.min(focusedIndex + 1, rows.length - 1);
+    rows[focusedIndex].classList.add('focused');
+    rows[focusedIndex].scrollIntoView({ block: 'nearest' });
+    return;
+  }
+  if (e.key === 'k' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (rows.length === 0) return;
+    rows.forEach(r => r.classList.remove('focused'));
+    focusedIndex = Math.max(focusedIndex - 1, 0);
+    rows[focusedIndex].classList.add('focused');
+    rows[focusedIndex].scrollIntoView({ block: 'nearest' });
+    return;
+  }
+  if (e.key === 'Enter') {
+    if (focusedIndex >= 0 && focusedIndex < rows.length) {
+      selectRow(rows[focusedIndex]);
+    }
+    return;
+  }
+});
+
+// Search / filter
+searchInput.addEventListener('input', (e) => {
+  filterRows(e.target.value.toLowerCase());
+});
+
+function filterRows(query) {
+  document.querySelectorAll('.project-row').forEach(row => {
+    const name = row.dataset.name.toLowerCase();
+    row.style.display = (!query || name.includes(query)) ? '' : 'none';
+  });
+}
+</script>
+</body>
+</html>

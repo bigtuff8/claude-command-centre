@@ -1,0 +1,1375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Command Centre — Bento Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --base: #09090b;
+    --card: #111113;
+    --card-hover: #1a1a1d;
+    --elevated: #1e1e21;
+    --border: #27272a;
+    --border-hover: #3f3f46;
+    --text-primary: #fafafa;
+    --text-secondary: #a1a1aa;
+    --text-muted: #71717a;
+    --blue: #3b82f6;
+    --green: #10b981;
+    --amber: #f59e0b;
+    --rose: #f43f5e;
+    --blue-dim: rgba(59, 130, 246, 0.15);
+    --green-dim: rgba(16, 185, 129, 0.15);
+    --amber-dim: rgba(245, 158, 11, 0.15);
+    --rose-dim: rgba(244, 63, 94, 0.15);
+    --radius-sm: 6px;
+    --radius: 8px;
+    --radius-lg: 12px;
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--base);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* Subtle gradient base layer for glassmorphism depth */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background:
+      radial-gradient(ellipse 60% 40% at 20% 10%, rgba(59,130,246,0.06) 0%, transparent 70%),
+      radial-gradient(ellipse 50% 50% at 80% 80%, rgba(244,63,94,0.04) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 30% at 50% 50%, rgba(245,158,11,0.03) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Metrics Bar ── */
+  .metrics-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 24px;
+    background: rgba(17,17,19,0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+  }
+  .metrics-bar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .metrics-bar-brand .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px rgba(16,185,129,0.5);
+  }
+  .metrics-bar-centre {
+    display: flex;
+    gap: 24px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .metrics-bar-centre span { display: flex; align-items: center; gap: 6px; }
+  .metrics-bar-centre .val { color: var(--text-primary); font-weight: 600; font-family: var(--mono); font-size: 13px; }
+  .metrics-bar-actions { display: flex; gap: 8px; }
+  .metrics-bar-actions button {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-family: var(--font);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .metrics-bar-actions button:hover {
+    border-color: var(--border-hover);
+    color: var(--text-primary);
+    background: var(--card);
+  }
+
+  /* ── Nav Tabs ── */
+  .nav-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 12px 24px 0;
+    position: relative;
+    z-index: 1;
+  }
+  .nav-tab {
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    font-family: var(--font);
+    transition: all 0.2s;
+  }
+  .nav-tab:hover { color: var(--text-secondary); background: rgba(255,255,255,0.03); }
+  .nav-tab.active {
+    color: var(--text-primary);
+    background: rgba(255,255,255,0.05);
+    border-bottom: 2px solid var(--blue);
+  }
+
+  /* ── Filter Pills ── */
+  .filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    position: relative;
+    z-index: 1;
+  }
+  .filter-bar label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-right: 4px;
+  }
+  .filter-pill {
+    padding: 5px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    cursor: pointer;
+    font-family: var(--font);
+    transition: all 0.2s;
+  }
+  .filter-pill:hover { border-color: var(--border-hover); color: var(--text-primary); }
+  .filter-pill.active {
+    background: var(--blue-dim);
+    border-color: var(--blue);
+    color: var(--blue);
+  }
+
+  /* ── Main Bento Grid ── */
+  .bento-container {
+    padding: 0 24px 24px;
+    position: relative;
+    z-index: 1;
+  }
+  .bento-grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 16px;
+  }
+
+  /* ── Glass Card Base ── */
+  .glass-tile {
+    background: rgba(17,17,19,0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    transition: all 0.25s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .glass-tile::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+  }
+
+  /* Tinted variants */
+  .glass-amber { background: rgba(17,17,19,0.82); }
+  .glass-amber::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(245,158,11,0.04);
+    pointer-events: none;
+    border-radius: var(--radius-lg);
+  }
+  .glass-rose { background: rgba(17,17,19,0.82); }
+  .glass-rose::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(244,63,94,0.04);
+    pointer-events: none;
+    border-radius: var(--radius-lg);
+  }
+
+  .tile-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+    z-index: 1;
+  }
+  .tile-title .count {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: rgba(255,255,255,0.06);
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+
+  /* ── Row 1: Gate Queue (span 8) ── */
+  .gate-queue { grid-column: span 8; }
+  .gate-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    background: rgba(245,158,11,0.06);
+    border: 1px solid rgba(245,158,11,0.15);
+    border-radius: var(--radius);
+    margin-bottom: 10px;
+    position: relative;
+    z-index: 1;
+  }
+  .gate-item:last-child { margin-bottom: 0; }
+  .gate-item-info { flex: 1; }
+  .gate-project {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+  .gate-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    display: flex;
+    gap: 12px;
+  }
+  .gate-type {
+    color: var(--amber);
+    font-weight: 500;
+  }
+  .gate-actions { display: flex; gap: 8px; }
+  .btn {
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    border: none;
+    cursor: pointer;
+    font-family: var(--font);
+    transition: all 0.2s;
+  }
+  .btn-outline {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+  .btn-outline:hover { border-color: var(--border-hover); color: var(--text-primary); background: rgba(255,255,255,0.04); }
+  .btn-amber {
+    background: rgba(245,158,11,0.15);
+    color: var(--amber);
+    border: 1px solid rgba(245,158,11,0.3);
+  }
+  .btn-amber:hover { background: rgba(245,158,11,0.25); }
+  .btn-blue {
+    background: rgba(59,130,246,0.15);
+    color: var(--blue);
+    border: 1px solid rgba(59,130,246,0.3);
+  }
+  .btn-blue:hover { background: rgba(59,130,246,0.25); }
+  .btn-small { padding: 4px 10px; font-size: 11px; }
+
+  /* ── Row 1: Portfolio Overview (span 4) ── */
+  .portfolio-overview { grid-column: span 4; }
+  .metric-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    position: relative;
+    z-index: 1;
+  }
+  .metric-item {
+    text-align: center;
+    padding: 12px 8px;
+    background: rgba(255,255,255,0.03);
+    border-radius: var(--radius);
+    border: 1px solid rgba(255,255,255,0.04);
+  }
+  .metric-item.span-2 { grid-column: span 2; }
+  .metric-value {
+    font-size: 28px;
+    font-weight: 700;
+    font-family: var(--mono);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .metric-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* ── Row 2: Stale Projects (span 6) ── */
+  .stale-projects { grid-column: span 6; }
+  .stale-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    position: relative;
+    z-index: 1;
+  }
+  .stale-item:last-child { border-bottom: none; }
+  .stale-name {
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .stale-details {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .staleness-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--amber-dim);
+    color: var(--amber);
+    margin-left: 8px;
+  }
+
+  /* ── Row 2: Risk Register (span 6) ── */
+  .risk-register { grid-column: span 6; }
+  .risk-table {
+    width: 100%;
+    border-collapse: collapse;
+    position: relative;
+    z-index: 1;
+  }
+  .risk-table th {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 8px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .risk-table td {
+    font-size: 12px;
+    padding: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    color: var(--text-secondary);
+  }
+  .risk-table tr:last-child td { border-bottom: none; }
+  .risk-id { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
+  .severity-high { color: var(--rose); font-weight: 600; }
+  .severity-medium { color: var(--amber); font-weight: 600; }
+  .severity-low { color: var(--green); font-weight: 600; }
+  .risk-status-open {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--rose-dim);
+    color: var(--rose);
+    font-weight: 500;
+  }
+  .risk-status-accepted {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.06);
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  /* ── Row 3: Project Cards ── */
+  .project-cards-section { grid-column: span 12; }
+  .project-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .project-card {
+    background: rgba(17,17,19,0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    position: relative;
+  }
+  .project-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+  }
+  .project-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--border-hover);
+    background: rgba(26,26,29,0.9);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  }
+  .project-card.stale {
+    opacity: 0.6;
+    filter: saturate(0.5);
+  }
+  .project-card.stale:hover {
+    opacity: 0.85;
+    filter: saturate(0.7);
+  }
+  .project-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .project-card-name {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .project-card-indicator {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .indicator-green { background: var(--green); box-shadow: 0 0 6px rgba(16,185,129,0.4); }
+  .indicator-amber { background: var(--amber); box-shadow: 0 0 6px rgba(245,158,11,0.4); }
+  .indicator-rose { background: var(--rose); box-shadow: 0 0 6px rgba(244,63,94,0.4); }
+  .project-card-tags {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .status-pill {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .pill-active { background: var(--green-dim); color: var(--green); }
+  .pill-planning { background: var(--blue-dim); color: var(--blue); }
+  .pill-blocked { background: var(--rose-dim); color: var(--rose); }
+  .pill-rfp { background: var(--amber-dim); color: var(--amber); }
+  .pill-infrastructure { background: rgba(255,255,255,0.08); color: var(--text-secondary); }
+  .scope-tag {
+    font-size: 10px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.05);
+    color: var(--text-muted);
+  }
+  .project-card-context {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 10px;
+  }
+  .project-card-date {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    font-family: var(--mono);
+  }
+  .progress-bar-container {
+    margin-bottom: 10px;
+  }
+  .progress-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+  }
+  .progress-track {
+    height: 4px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--blue);
+    transition: width 0.5s ease;
+  }
+  .progress-fill.high { background: var(--green); }
+  .progress-fill.mid { background: var(--amber); }
+  .progress-fill.low { background: var(--rose); }
+  .project-card-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 4px;
+  }
+
+  /* ── Row 4 tiles ── */
+  .dict-audit { grid-column: span 4; }
+  .activity-feed { grid-column: span 4; }
+  .quick-stats { grid-column: span 4; }
+
+  .audit-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    position: relative;
+    z-index: 1;
+  }
+  .audit-item:last-child { border-bottom: none; }
+  .audit-name { font-size: 13px; font-weight: 500; }
+  .audit-right { display: flex; align-items: center; gap: 8px; }
+  .audit-status {
+    font-size: 14px;
+    width: 20px;
+    text-align: center;
+  }
+  .audit-date { font-size: 10px; color: var(--text-muted); font-family: var(--mono); }
+  .audit-stale { color: var(--amber); }
+
+  /* Activity Feed */
+  .feed-item {
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    position: relative;
+    z-index: 1;
+  }
+  .feed-item:last-child { border-bottom: none; }
+  .feed-time {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: var(--mono);
+    margin-bottom: 2px;
+  }
+  .feed-content { font-size: 12px; color: var(--text-secondary); line-height: 1.4; }
+  .feed-project { color: var(--blue); font-weight: 500; }
+
+  /* Quick Stats */
+  .stat-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    position: relative;
+    z-index: 1;
+  }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-label { font-size: 12px; color: var(--text-secondary); }
+  .stat-value { font-size: 14px; font-weight: 600; font-family: var(--mono); }
+  .split-bar {
+    display: flex;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 12px 0 6px;
+    gap: 2px;
+    position: relative;
+    z-index: 1;
+  }
+  .split-work { flex: 6; background: var(--blue); border-radius: 4px; }
+  .split-personal { flex: 4; background: var(--green); border-radius: 4px; }
+  .split-legend {
+    display: flex;
+    gap: 16px;
+    font-size: 11px;
+    color: var(--text-muted);
+    position: relative;
+    z-index: 1;
+  }
+  .split-legend span { display: flex; align-items: center; gap: 4px; }
+  .legend-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+  /* ── Detail Panel (slide-in) ── */
+  .detail-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 200;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+  .detail-overlay.open { opacity: 1; pointer-events: all; }
+  .detail-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 50%;
+    max-width: 600px;
+    height: 100vh;
+    background: rgba(17,17,19,0.92);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    border-left: 1px solid var(--border);
+    z-index: 201;
+    transform: translateX(100%);
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    overflow-y: auto;
+    padding: 28px;
+  }
+  .detail-panel.open { transform: translateX(0); }
+  .detail-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    width: 32px; height: 32px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font);
+    transition: all 0.2s;
+  }
+  .detail-close:hover { border-color: var(--border-hover); color: var(--text-primary); }
+  .detail-title { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+  .detail-subtitle { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; }
+  .detail-section { margin-bottom: 20px; }
+  .detail-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+  .detail-item {
+    font-size: 13px;
+    color: var(--text-secondary);
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    line-height: 1.5;
+  }
+  .detail-item:last-child { border-bottom: none; }
+  .detail-launch {
+    margin-top: 20px;
+    width: 100%;
+    padding: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    background: var(--blue-dim);
+    color: var(--blue);
+    border: 1px solid rgba(59,130,246,0.3);
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-family: var(--font);
+    transition: all 0.2s;
+  }
+  .detail-launch:hover { background: rgba(59,130,246,0.25); }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 20px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    z-index: 300;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s ease;
+    pointer-events: none;
+    backdrop-filter: blur(20px);
+  }
+  .toast.show { opacity: 1; transform: translateY(0); pointer-events: all; }
+
+  /* ── Responsive adjustments ── */
+  @media (max-width: 1200px) {
+    .project-cards-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 900px) {
+    .bento-grid { grid-template-columns: 1fr; }
+    .gate-queue, .portfolio-overview, .stale-projects, .risk-register,
+    .project-cards-section, .dict-audit, .activity-feed, .quick-stats {
+      grid-column: span 1 !important;
+    }
+    .project-cards-grid { grid-template-columns: 1fr; }
+    .detail-panel { width: 100%; max-width: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── METRICS BAR ── -->
+<header class="metrics-bar">
+  <div class="metrics-bar-brand">
+    <span class="dot"></span>
+    Command Centre
+  </div>
+  <div class="metrics-bar-centre">
+    <span>Projects <span class="val">39</span></span>
+    <span>Active <span class="val" style="color:var(--green)">6</span></span>
+    <span>At Gate <span class="val" style="color:var(--amber)">2</span></span>
+    <span>Risks <span class="val" style="color:var(--rose)">3</span></span>
+    <span>Uptime <span class="val">99.7%</span></span>
+  </div>
+  <div class="metrics-bar-actions">
+    <button onclick="showToast('Refreshing data...')">Refresh</button>
+    <button onclick="showToast('Settings panel coming soon')">Settings</button>
+  </div>
+</header>
+
+<!-- ── NAV TABS ── -->
+<nav class="nav-tabs">
+  <button class="nav-tab" onclick="setTab(this)">Sessions</button>
+  <button class="nav-tab active" onclick="setTab(this)">Portfolio</button>
+  <button class="nav-tab" onclick="setTab(this)">Risks</button>
+  <button class="nav-tab" onclick="setTab(this)">Activity</button>
+  <button class="nav-tab" onclick="setTab(this)">Audit</button>
+</nav>
+
+<!-- ── FILTER BAR ── -->
+<div class="filter-bar">
+  <label>Filter</label>
+  <button class="filter-pill active" onclick="setFilter(this, 'all')">All</button>
+  <button class="filter-pill" onclick="setFilter(this, 'work')">Work</button>
+  <button class="filter-pill" onclick="setFilter(this, 'personal')">Personal</button>
+  <button class="filter-pill" onclick="setFilter(this, 'stale')">Stale</button>
+  <button class="filter-pill" onclick="setFilter(this, 'gate')">At Gate</button>
+</div>
+
+<!-- ── BENTO GRID ── -->
+<main class="bento-container">
+  <div class="bento-grid">
+
+    <!-- ROW 1: Gate Queue -->
+    <section class="glass-tile glass-amber gate-queue">
+      <div class="tile-title">
+        Gate Queue
+        <span class="count">2 awaiting</span>
+      </div>
+      <div class="gate-item">
+        <div class="gate-item-info">
+          <div class="gate-project">Holiday System</div>
+          <div class="gate-meta">
+            <span class="gate-type">Design Gate</span>
+            <span>Reached 2026-04-15</span>
+          </div>
+        </div>
+        <div class="gate-actions">
+          <button class="btn btn-outline" onclick="showToast('Opening review.html')">Open Review</button>
+          <button class="btn btn-amber" onclick="showToast('Launching session...')">Launch Session</button>
+        </div>
+      </div>
+      <div class="gate-item">
+        <div class="gate-item-info">
+          <div class="gate-project">Zendesk Integration</div>
+          <div class="gate-meta">
+            <span class="gate-type">Pre-deployment Gate</span>
+            <span>Reached 2026-04-17</span>
+          </div>
+        </div>
+        <div class="gate-actions">
+          <button class="btn btn-outline" onclick="showToast('Opening review.html')">Open Review</button>
+          <button class="btn btn-amber" onclick="showToast('Launching session...')">Launch Session</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ROW 1: Portfolio Overview -->
+    <section class="glass-tile portfolio-overview">
+      <div class="tile-title">Portfolio Overview</div>
+      <div class="metric-grid">
+        <div class="metric-item span-2">
+          <div class="metric-value" style="color:var(--text-primary)">39</div>
+          <div class="metric-label">Total Projects</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-value" style="color:var(--green)">6</div>
+          <div class="metric-label">Active</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-value" style="color:var(--amber)">3</div>
+          <div class="metric-label">Stale</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-value" style="color:var(--amber)">2</div>
+          <div class="metric-label">At Gate</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-value" style="color:var(--rose)">1</div>
+          <div class="metric-label">At Risk</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ROW 2: Stale Projects -->
+    <section class="glass-tile glass-amber stale-projects">
+      <div class="tile-title" style="color:var(--amber)">
+        Needs Attention
+        <span class="count">3 projects</span>
+      </div>
+      <div class="stale-item">
+        <div>
+          <div class="stale-name">IOT Admin</div>
+          <div class="stale-details">Last active 2026-03-10 &middot; Work</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="staleness-badge">39 days</span>
+          <button class="btn btn-amber btn-small" onclick="showToast('Launching session...')">Launch Session</button>
+        </div>
+      </div>
+      <div class="stale-item">
+        <div>
+          <div class="stale-name">Figma Integration</div>
+          <div class="stale-details">Last active 2026-03-02 &middot; Work</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="staleness-badge">47 days</span>
+          <button class="btn btn-amber btn-small" onclick="showToast('Launching session...')">Launch Session</button>
+        </div>
+      </div>
+      <div class="stale-item">
+        <div>
+          <div class="stale-name">HR System</div>
+          <div class="stale-details">Last active 2026-02-28 &middot; Work</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="staleness-badge">49 days</span>
+          <button class="btn btn-amber btn-small" onclick="showToast('Launching session...')">Launch Session</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ROW 2: Risk Register -->
+    <section class="glass-tile glass-rose risk-register">
+      <div class="tile-title" style="color:var(--rose)">
+        Risk Register
+        <span class="count">3 risks</span>
+      </div>
+      <table class="risk-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Project</th>
+            <th>Perspective</th>
+            <th>Severity</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="risk-id">R001</td>
+            <td>Command Centre</td>
+            <td>Security</td>
+            <td class="severity-medium">Medium</td>
+            <td><span class="risk-status-open">Open</span></td>
+          </tr>
+          <tr>
+            <td class="risk-id">R002</td>
+            <td>Holiday System</td>
+            <td>Compliance</td>
+            <td class="severity-high">High</td>
+            <td><span class="risk-status-open">Open</span></td>
+          </tr>
+          <tr>
+            <td class="risk-id">R003</td>
+            <td>family-hub</td>
+            <td>Technical</td>
+            <td class="severity-low">Low</td>
+            <td><span class="risk-status-accepted">Accepted</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ROW 3: Project Cards -->
+    <section class="project-cards-section">
+      <div class="tile-title" style="padding: 0 0 4px 0;">
+        Projects
+        <span class="count" id="project-count">10</span>
+      </div>
+      <div class="project-cards-grid" id="project-cards-grid">
+        <!-- Populated by JS -->
+      </div>
+    </section>
+
+    <!-- ROW 4: Data Dictionary Audit -->
+    <section class="glass-tile dict-audit">
+      <div class="tile-title">
+        Data Dictionary Audit
+      </div>
+      <div class="audit-item">
+        <span class="audit-name">Command Centre</span>
+        <div class="audit-right">
+          <span class="audit-date">2026-04-16</span>
+          <span class="audit-status" style="color:var(--green)">&#10003;</span>
+        </div>
+      </div>
+      <div class="audit-item">
+        <span class="audit-name">family-hub</span>
+        <div class="audit-right">
+          <span class="audit-date">2026-04-10</span>
+          <span class="audit-status" style="color:var(--green)">&#10003;</span>
+        </div>
+      </div>
+      <div class="audit-item">
+        <span class="audit-name">Holiday System</span>
+        <div class="audit-right">
+          <span class="audit-date audit-stale">2026-03-15</span>
+          <span class="audit-status audit-stale">&#10003;</span>
+        </div>
+      </div>
+      <div class="audit-item">
+        <span class="audit-name">ITSM</span>
+        <div class="audit-right">
+          <span class="audit-date" style="color:var(--rose)">Missing</span>
+          <span class="audit-status" style="color:var(--rose)">&#10007;</span>
+        </div>
+      </div>
+      <div class="audit-item">
+        <span class="audit-name">IOT Admin</span>
+        <div class="audit-right">
+          <span class="audit-date" style="color:var(--rose)">Missing</span>
+          <span class="audit-status" style="color:var(--rose)">&#10007;</span>
+        </div>
+      </div>
+      <div class="audit-item">
+        <span class="audit-name">Thingsboard</span>
+        <div class="audit-right">
+          <span class="audit-date">2026-04-14</span>
+          <span class="audit-status" style="color:var(--green)">&#10003;</span>
+        </div>
+      </div>
+      <div class="audit-item">
+        <span class="audit-name">outlook-mcp</span>
+        <div class="audit-right">
+          <span class="audit-date" style="color:var(--rose)">Missing</span>
+          <span class="audit-status" style="color:var(--rose)">&#10007;</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ROW 4: Activity Feed -->
+    <section class="glass-tile activity-feed">
+      <div class="tile-title">
+        Activity Feed
+      </div>
+      <div class="feed-item">
+        <div class="feed-time">2026-04-17 14:22</div>
+        <div class="feed-content"><span class="feed-project">Command Centre</span> Committed v0.2.0 release</div>
+      </div>
+      <div class="feed-item">
+        <div class="feed-time">2026-04-17 11:05</div>
+        <div class="feed-content"><span class="feed-project">claude-workspace</span> Updated launcher settings sync</div>
+      </div>
+      <div class="feed-item">
+        <div class="feed-time">2026-04-16 16:30</div>
+        <div class="feed-content"><span class="feed-project">family-hub</span> Phase 2 meal planning UI complete</div>
+      </div>
+      <div class="feed-item">
+        <div class="feed-time">2026-04-16 09:15</div>
+        <div class="feed-content"><span class="feed-project">Happy Coder</span> Added push notification relay</div>
+      </div>
+      <div class="feed-item">
+        <div class="feed-time">2026-04-15 13:40</div>
+        <div class="feed-content"><span class="feed-project">outlook-mcp</span> Fixed calendar event parsing</div>
+      </div>
+      <div class="feed-item">
+        <div class="feed-time">2026-04-15 10:20</div>
+        <div class="feed-content"><span class="feed-project">Holiday System</span> Design gate review submitted</div>
+      </div>
+      <div class="feed-item">
+        <div class="feed-time">2026-04-14 15:55</div>
+        <div class="feed-content"><span class="feed-project">Thingsboard</span> Connected temperature sensors</div>
+      </div>
+      <div class="feed-item">
+        <div class="feed-time">2026-04-14 09:30</div>
+        <div class="feed-content"><span class="feed-project">ITSM</span> Ticket workflow v2 merged</div>
+      </div>
+      <div class="feed-item">
+        <div class="feed-time">2026-04-13 14:10</div>
+        <div class="feed-content"><span class="feed-project">Zendesk Integration</span> Pre-deployment gate reached</div>
+      </div>
+      <div class="feed-item">
+        <div class="feed-time">2026-04-12 11:45</div>
+        <div class="feed-content"><span class="feed-project">ITSM</span> SLA dashboard component added</div>
+      </div>
+    </section>
+
+    <!-- ROW 4: Quick Stats -->
+    <section class="glass-tile quick-stats">
+      <div class="tile-title">
+        Quick Stats
+      </div>
+      <div style="position:relative;z-index:1">
+        <div class="detail-section-title" style="margin-bottom: 6px;">Work vs Personal Split</div>
+        <div class="split-bar">
+          <div class="split-work"></div>
+          <div class="split-personal"></div>
+        </div>
+        <div class="split-legend">
+          <span><span class="legend-dot" style="background:var(--blue)"></span> Work (24)</span>
+          <span><span class="legend-dot" style="background:var(--green)"></span> Personal (15)</span>
+        </div>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Most Active This Week</span>
+        <span class="stat-value" style="color:var(--blue)">Command Centre</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Sessions This Week</span>
+        <span class="stat-value">14</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Commits This Week</span>
+        <span class="stat-value">37</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Avg Session Duration</span>
+        <span class="stat-value">42m</span>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<!-- ── Detail Panel ── -->
+<div class="detail-overlay" id="detail-overlay" onclick="closePanel()"></div>
+<div class="detail-panel" id="detail-panel">
+  <button class="detail-close" onclick="closePanel()">&times;</button>
+  <div id="detail-content"></div>
+</div>
+
+<!-- ── Toast ── -->
+<div class="toast" id="toast"></div>
+
+<script>
+  // ── Project Data ──
+  const projects = [
+    {
+      name: 'Command Centre',
+      status: 'Active',
+      statusClass: 'pill-active',
+      scope: 'Work',
+      lastActive: '2026-04-17',
+      features: [31, 33],
+      context: 'Web dashboard for Claude Code sessions',
+      stale: false,
+      indicator: 'green',
+      sessions: ['2026-04-17: Committed v0.2.0 release', '2026-04-16: Built bento prototype', '2026-04-15: Added risk register tile'],
+      gitLog: ['abc1234 — v0.2.0 release', 'def5678 — bento grid layout', '901abcd — risk register component']
+    },
+    {
+      name: 'family-hub',
+      status: 'Active - Phase 2',
+      statusClass: 'pill-active',
+      scope: 'Personal',
+      lastActive: '2026-04-16',
+      features: null,
+      context: 'Family management app (React + FastAPI)',
+      stale: false,
+      indicator: 'green',
+      sessions: ['2026-04-16: Phase 2 meal planning UI complete', '2026-04-14: API endpoints for recipes'],
+      gitLog: ['e12f345 — meal planning UI', 'a67b890 — recipe API endpoints']
+    },
+    {
+      name: 'Thingsboard Integration',
+      status: 'Active',
+      statusClass: 'pill-active',
+      scope: 'Work',
+      lastActive: '2026-04-14',
+      features: [5, 15],
+      context: 'IoT device management integration',
+      stale: false,
+      indicator: 'green',
+      sessions: ['2026-04-14: Connected temperature sensors'],
+      gitLog: ['c34d567 — sensor connectivity']
+    },
+    {
+      name: 'ITSM',
+      status: 'Active',
+      statusClass: 'pill-active',
+      scope: 'Work',
+      lastActive: '2026-04-12',
+      features: [8, 20],
+      context: 'IT Service Management system',
+      stale: false,
+      indicator: 'green',
+      sessions: ['2026-04-12: SLA dashboard component added', '2026-04-10: Ticket workflow v2 merged'],
+      gitLog: ['f89a012 — SLA dashboard', 'b34c567 — ticket workflow v2']
+    },
+    {
+      name: 'Happy Coder',
+      status: 'Active',
+      statusClass: 'pill-active',
+      scope: 'Personal',
+      lastActive: '2026-04-16',
+      features: null,
+      context: 'Mobile coding companion app',
+      stale: false,
+      indicator: 'green',
+      sessions: ['2026-04-16: Added push notification relay'],
+      gitLog: ['d56e789 — push notification relay']
+    },
+    {
+      name: 'outlook-mcp',
+      status: 'Active',
+      statusClass: 'pill-active',
+      scope: 'Personal',
+      lastActive: '2026-04-15',
+      features: null,
+      context: 'Outlook MCP server for email/calendar',
+      stale: false,
+      indicator: 'green',
+      sessions: ['2026-04-15: Fixed calendar event parsing'],
+      gitLog: ['a90b123 — calendar event fix']
+    },
+    {
+      name: 'IOT Admin',
+      status: 'Active',
+      statusClass: 'pill-active',
+      scope: 'Work',
+      lastActive: '2026-03-10',
+      features: [0, 12],
+      context: 'IoT device administration panel',
+      stale: true,
+      indicator: 'rose',
+      sessions: ['2026-03-10: Initial scaffold created'],
+      gitLog: ['c45d678 — initial scaffold']
+    },
+    {
+      name: 'Figma Integration',
+      status: 'Active',
+      statusClass: 'pill-active',
+      scope: 'Work',
+      lastActive: '2026-03-02',
+      features: [3, 8],
+      context: 'Design token sync from Figma',
+      stale: true,
+      indicator: 'rose',
+      sessions: ['2026-03-02: Token extraction MVP'],
+      gitLog: ['e78f901 — token extraction']
+    },
+    {
+      name: 'HR System',
+      status: 'RFP Phase',
+      statusClass: 'pill-rfp',
+      scope: 'Work',
+      lastActive: '2026-02-28',
+      features: null,
+      context: 'HR management system — requirements gathering',
+      stale: true,
+      indicator: 'rose',
+      sessions: ['2026-02-28: RFP document drafted'],
+      gitLog: ['f01a234 — RFP draft']
+    },
+    {
+      name: 'claude-workspace',
+      status: 'Infrastructure',
+      statusClass: 'pill-infrastructure',
+      scope: 'Personal',
+      lastActive: '2026-04-17',
+      features: null,
+      context: 'Claude Code launcher and workspace configs',
+      stale: false,
+      indicator: 'green',
+      sessions: ['2026-04-17: Updated launcher settings sync'],
+      gitLog: ['b23c456 — launcher settings sync']
+    }
+  ];
+
+  let activeFilter = 'all';
+
+  // ── Render Project Cards ──
+  function renderCards() {
+    const grid = document.getElementById('project-cards-grid');
+    const countEl = document.getElementById('project-count');
+    let filtered = projects;
+
+    if (activeFilter === 'work') filtered = projects.filter(p => p.scope === 'Work');
+    else if (activeFilter === 'personal') filtered = projects.filter(p => p.scope === 'Personal');
+    else if (activeFilter === 'stale') filtered = projects.filter(p => p.stale);
+    else if (activeFilter === 'gate') filtered = []; // Gate items are in the dedicated tile
+
+    countEl.textContent = filtered.length;
+
+    grid.innerHTML = filtered.map((p, i) => {
+      const progressHTML = p.features ? `
+        <div class="progress-bar-container">
+          <div class="progress-label">
+            <span>Features</span>
+            <span>${p.features[0]}/${p.features[1]}</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill ${getProgressClass(p.features[0], p.features[1])}"
+                 style="width:${(p.features[0] / p.features[1] * 100)}%"></div>
+          </div>
+        </div>` : '';
+
+      return `
+        <div class="project-card ${p.stale ? 'stale' : ''}" onclick="openPanel(${i})">
+          <div class="project-card-header">
+            <span class="project-card-name">${p.name}</span>
+            <span class="project-card-indicator indicator-${p.indicator}"></span>
+          </div>
+          <div class="project-card-tags">
+            <span class="status-pill ${p.statusClass}">${p.status}</span>
+            <span class="scope-tag">${p.scope}</span>
+          </div>
+          <div class="project-card-date">Last active: ${p.lastActive}</div>
+          ${progressHTML}
+          <div class="project-card-context">${p.context}</div>
+          <div class="project-card-footer">
+            <button class="btn btn-blue btn-small" onclick="event.stopPropagation(); showToast('Launching session...')">Launch Session</button>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  function getProgressClass(done, total) {
+    const pct = done / total;
+    if (pct >= 0.75) return 'high';
+    if (pct >= 0.4) return 'mid';
+    return 'low';
+  }
+
+  // ── Filter ──
+  function setFilter(el, filter) {
+    document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+    el.classList.add('active');
+    activeFilter = filter;
+    renderCards();
+  }
+
+  // ── Nav Tabs ──
+  function setTab(el) {
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    showToast(`Switched to ${el.textContent} view`);
+  }
+
+  // ── Detail Panel ──
+  function openPanel(idx) {
+    const filtered = activeFilter === 'all' ? projects :
+      activeFilter === 'work' ? projects.filter(p => p.scope === 'Work') :
+      activeFilter === 'personal' ? projects.filter(p => p.scope === 'Personal') :
+      activeFilter === 'stale' ? projects.filter(p => p.stale) : [];
+
+    const p = filtered[idx];
+    if (!p) return;
+
+    const content = document.getElementById('detail-content');
+    const progressHTML = p.features ? `
+      <div class="detail-section">
+        <div class="detail-section-title">Feature Progress</div>
+        <div class="progress-bar-container">
+          <div class="progress-label">
+            <span>${p.features[0]} of ${p.features[1]} complete</span>
+            <span>${Math.round(p.features[0] / p.features[1] * 100)}%</span>
+          </div>
+          <div class="progress-track" style="height:6px">
+            <div class="progress-fill ${getProgressClass(p.features[0], p.features[1])}"
+                 style="width:${(p.features[0] / p.features[1] * 100)}%"></div>
+          </div>
+        </div>
+      </div>` : '';
+
+    content.innerHTML = `
+      <div class="detail-title">${p.name}</div>
+      <div class="detail-subtitle">${p.context}</div>
+      <div class="project-card-tags" style="margin-bottom:16px">
+        <span class="status-pill ${p.statusClass}">${p.status}</span>
+        <span class="scope-tag">${p.scope}</span>
+        ${p.stale ? '<span class="staleness-badge">Stale</span>' : ''}
+      </div>
+
+      <div class="detail-section">
+        <div class="detail-section-title">Status</div>
+        <div class="detail-item">Last active: <strong>${p.lastActive}</strong></div>
+        <div class="detail-item">Staleness indicator: <span class="project-card-indicator indicator-${p.indicator}" style="display:inline-block;vertical-align:middle;width:8px;height:8px;border-radius:50%;margin-left:6px;"></span></div>
+      </div>
+
+      ${progressHTML}
+
+      <div class="detail-section">
+        <div class="detail-section-title">Recent Sessions</div>
+        ${p.sessions.map(s => `<div class="detail-item">${s}</div>`).join('')}
+      </div>
+
+      <div class="detail-section">
+        <div class="detail-section-title">Git Log</div>
+        ${p.gitLog.map(g => `<div class="detail-item" style="font-family:var(--mono);font-size:12px;color:var(--text-muted)">${g}</div>`).join('')}
+      </div>
+
+      <button class="detail-launch" onclick="showToast('Launching session for ${p.name}...')">Launch Session</button>
+    `;
+
+    document.getElementById('detail-overlay').classList.add('open');
+    document.getElementById('detail-panel').classList.add('open');
+  }
+
+  function closePanel() {
+    document.getElementById('detail-overlay').classList.remove('open');
+    document.getElementById('detail-panel').classList.remove('open');
+  }
+
+  // ── Toast ──
+  let toastTimer;
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+  }
+
+  // ── Keyboard ──
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closePanel();
+  });
+
+  // ── Init ──
+  renderCards();
+</script>
+</body>
+</html>

@@ -16,7 +16,41 @@ Gaps identified:
 Feature list: portfolio-feature-list.json (separate from core feature-list.json)
 
 --- Designer ---
-[Not yet started]
+Design iteration: 1 — 3 directions produced (Gravity Well, Signal Board, Bento Control)
+Design iteration: 2 — Combined prototype merging Direction 3 base + Direction 1 aurora/decay + Direction 2 list view
+Design iteration: 3 — All 5 tabs fully populated (Sessions, Portfolio, Risks, Activity, Audit)
+Design iteration: 4 — Global permission bar (visible on all tabs), consistent filter row frame across all tabs
+
+Direction chosen: Combined (Bento Control base + Gravity Well effects + Signal Board list view)
+Key decisions:
+  - Glassmorphism cards with tinted variants (amber for gates/stale, rose for risks)
+  - Aurora animated background (60s cycle, barely perceptible)
+  - Desaturation decay on stale project cards (saturate CSS filter)
+  - Heat trail 30-day activity strips on all project cards/rows
+  - Board view (bento grid) + List view (styled table) toggle on Portfolio tab
+  - 5 tabs: Sessions, Portfolio, Risks, Activity, Audit
+  - Consistent filter row frame across all tabs (same position, same height, different content)
+  - Global permission bar visible on ALL tabs (not just Sessions)
+  - Sessions tab badge when permissions pending
+  - Detail panel (slide-in from right, glass background) shared across views
+  - Contribution heatmap on Activity tab
+  - Health score gauge on Audit tab
+  - Risk register with inline editing (writes back to markdown)
+
+Artefacts:
+  - portfolio-design-spec.md (design specification)
+  - portfolio-design-research.md (market research)
+  - prototype/direction-combined.html (interactive prototype — all 5 tabs)
+  - prototype/direction-1-gravity-well.html (reference)
+  - prototype/direction-2-signal-board.html (reference)
+  - prototype/direction-3-bento-control.html (reference)
+
+Design Gate: APPROVED WITH AMENDMENTS (2026-04-18)
+Amendments:
+  1. Database layer (SQLite) to replace direct markdown parsing — referenced in design spec as companion project, separate build
+  2. All 5 tabs in scope (not just Portfolio) — Sessions is minor integration, other 4 are new builds
+  3. Product distribution assessment added — colleague-shareable is close, open market is a separate pivot
+SteerCo Companion: No blocking concerns. 3 advisory notes (parser fragility → solved by DB, auth gap inherited, scope clarified).
 
 --- Developer ---
 [Not yet started]

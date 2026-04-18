@@ -1,0 +1,4362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Command Centre - Combined Portfolio Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ========================================
+   CSS VARIABLES
+   ======================================== */
+:root {
+  --bg-base: #09090b;
+  --bg-card: #111113;
+  --bg-card-hover: #1a1a1d;
+  --bg-elevated: #1e1e21;
+  --border: #27272a;
+  --border-hover: #3f3f46;
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --blue: #3b82f6;
+  --blue-dim: rgba(59,130,246,0.15);
+  --green: #10b981;
+  --green-dim: rgba(16,185,129,0.15);
+  --amber: #f59e0b;
+  --amber-dim: rgba(245,158,11,0.15);
+  --rose: #f43f5e;
+  --rose-dim: rgba(244,63,94,0.15);
+}
+
+/* ========================================
+   RESET & BASE
+   ======================================== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ========================================
+   AURORA BACKGROUND
+   ======================================== */
+.aurora {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.aurora-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+}
+
+.aurora-blob-1 {
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(59,130,246,0.06) 0%, transparent 70%);
+  animation: aurora-drift-1 60s ease-in-out infinite;
+  top: -10%;
+  left: -5%;
+}
+
+.aurora-blob-2 {
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(139,92,246,0.05) 0%, transparent 70%);
+  animation: aurora-drift-2 60s ease-in-out infinite;
+  top: 30%;
+  right: -10%;
+}
+
+.aurora-blob-3 {
+  width: 550px;
+  height: 550px;
+  background: radial-gradient(circle, rgba(20,184,166,0.04) 0%, transparent 70%);
+  animation: aurora-drift-3 60s ease-in-out infinite;
+  bottom: -15%;
+  left: 30%;
+}
+
+@keyframes aurora-drift-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(15vw, 10vh) scale(1.1); }
+  50% { transform: translate(5vw, 25vh) scale(0.95); }
+  75% { transform: translate(-10vw, 15vh) scale(1.05); }
+}
+
+@keyframes aurora-drift-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(-20vw, -5vh) scale(1.05); }
+  50% { transform: translate(-10vw, 15vh) scale(1.1); }
+  75% { transform: translate(5vw, -10vh) scale(0.9); }
+}
+
+@keyframes aurora-drift-3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(10vw, -15vh) scale(1.08); }
+  50% { transform: translate(-15vw, -5vh) scale(0.92); }
+  75% { transform: translate(5vw, 10vh) scale(1.05); }
+}
+
+/* ========================================
+   METRICS BAR (sticky top)
+   ======================================== */
+.metrics-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  gap: 16px;
+}
+
+.metrics-bar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  white-space: nowrap;
+}
+
+.metrics-bar-brand .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--blue);
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.metrics-group {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.metric-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.metric-value {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.metric-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+.metrics-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ========================================
+   BUTTONS
+   ======================================== */
+.btn {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+.btn-primary {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
+.btn-sm {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+.btn-full {
+  width: 100%;
+  text-align: center;
+}
+
+.btn-toggle {
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-toggle:first-child { border-radius: 6px 0 0 6px; }
+.btn-toggle:last-child { border-radius: 0 6px 6px 0; }
+.btn-toggle + .btn-toggle { border-left: none; }
+
+.btn-toggle.active {
+  background: var(--blue-dim);
+  color: var(--blue);
+  border-color: rgba(59,130,246,0.3);
+}
+.btn-toggle.active + .btn-toggle { border-left-color: rgba(59,130,246,0.3); }
+
+/* ========================================
+   NAVIGATION TABS
+   ======================================== */
+.nav-section {
+  position: sticky;
+  top: 49px;
+  z-index: 9;
+  background: var(--bg-base);
+  border-bottom: 1px solid var(--border);
+}
+
+.nav-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 24px;
+}
+
+.nav-tab {
+  padding: 12px 16px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.nav-tab:hover { color: var(--text-secondary); }
+.nav-tab.active { color: var(--text-primary); border-bottom-color: var(--blue); }
+
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--rose);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 4px;
+  animation: badgePulse 2s infinite;
+}
+
+@keyframes badgePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 24px 12px;
+  min-height: 44px;
+}
+
+.tab-filters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.filter-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.filter-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.filter-pills {
+  display: flex;
+  gap: 6px;
+}
+
+.pill {
+  padding: 4px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.pill:hover { color: var(--text-secondary); border-color: var(--border-hover); }
+.pill.active { color: var(--blue); background: var(--blue-dim); border-color: rgba(59,130,246,0.3); }
+
+.view-toggle {
+  display: flex;
+}
+
+/* ========================================
+   MAIN CONTENT
+   ======================================== */
+.main-content {
+  position: relative;
+  z-index: 1;
+  padding: 24px;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+/* ========================================
+   GLASSMORPHISM TILES
+   ======================================== */
+.glass {
+  background: rgba(17, 17, 19, 0.75);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  transition: all 0.2s ease;
+}
+
+.glass:hover {
+  border-color: var(--border-hover);
+}
+
+.tile-header {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tile-header .count {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.tile-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* ========================================
+   BOARD VIEW — BENTO GRID
+   ======================================== */
+.bento-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 16px;
+}
+
+.tile-gate { grid-column: span 8; }
+.tile-portfolio { grid-column: span 4; }
+.tile-stale { grid-column: span 6; }
+.tile-risks { grid-column: span 6; }
+.tile-projects { grid-column: span 12; }
+.tile-third { grid-column: span 4; }
+
+/* Gate Queue */
+.tile-gate {
+  background: rgba(17, 17, 19, 0.75);
+  border-top: 2px solid var(--amber);
+}
+
+.tile-gate .glass-tint {
+  background: rgba(245, 158, 11, 0.05);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 8px;
+}
+
+.tile-gate .glass-tint:last-child { margin-bottom: 0; }
+
+.gate-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.gate-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 200px;
+}
+
+.gate-project {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.gate-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gate-type {
+  color: var(--amber);
+  font-weight: 500;
+}
+
+.gate-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Portfolio Overview */
+.portfolio-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.portfolio-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 4px;
+  background: rgba(255,255,255,0.02);
+  border-radius: 8px;
+}
+
+.portfolio-metric .value {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.portfolio-metric .label {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+/* Stale Projects */
+.tile-stale {
+  border-left: 3px solid var(--amber);
+}
+
+.stale-item {
+  padding: 12px;
+  background: rgba(245, 158, 11, 0.05);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stale-item:last-child { margin-bottom: 0; }
+
+.stale-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.stale-name {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.stale-bottom {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.stale-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Status pill */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  gap: 4px;
+}
+
+.status-active { background: var(--green-dim); color: var(--green); }
+.status-gate { background: var(--amber-dim); color: var(--amber); }
+.status-stale { background: var(--amber-dim); color: var(--amber); }
+.status-risk { background: var(--rose-dim); color: var(--rose); }
+.status-archived { background: rgba(113,113,122,0.15); color: var(--text-muted); }
+.status-planning { background: var(--blue-dim); color: var(--blue); }
+.status-infra { background: rgba(139,92,246,0.15); color: #8b5cf6; }
+
+.staleness-badge {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.staleness-amber { background: var(--amber-dim); color: var(--amber); }
+.staleness-rose { background: var(--rose-dim); color: var(--rose); }
+
+/* Risk Register */
+.tile-risks {
+  border-left: 3px solid var(--rose);
+}
+
+.risk-item {
+  padding: 12px;
+  background: rgba(244, 63, 94, 0.05);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.risk-item:last-child { margin-bottom: 0; }
+
+.risk-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.risk-id {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.risk-project {
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.risk-perspective {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.risk-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+.severity-pill {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.severity-high { background: var(--rose-dim); color: var(--rose); }
+.severity-medium { background: var(--amber-dim); color: var(--amber); }
+.severity-low { background: var(--green-dim); color: var(--green); }
+
+.risk-status {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* ========================================
+   HEAT TRAIL
+   ======================================== */
+.heat-trail {
+  display: flex;
+  gap: 1px;
+  border-radius: 3px;
+  overflow: hidden;
+  height: 12px;
+}
+
+.heat-cell {
+  width: 4px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.heat-active { background: var(--green); }
+.heat-inactive { background: var(--bg-card-hover); }
+
+/* ========================================
+   PROJECT CARDS
+   ======================================== */
+.projects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.project-card {
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.project-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-hover);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+
+.project-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.project-card-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.project-card-second {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.scope-tag {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.04);
+}
+
+.staleness-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot-green { background: var(--green); }
+.dot-amber { background: var(--amber); }
+.dot-rose { background: var(--rose); }
+.dot-grey { background: var(--text-muted); }
+
+.project-context {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-risk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--rose);
+  margin-bottom: 8px;
+}
+
+/* Progress bar */
+.progress-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--bg-elevated);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--green);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.progress-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.project-card-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.last-active {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Desaturation decay */
+.decay-0 { filter: saturate(1.0); }
+.decay-1 { filter: saturate(0.85); }
+.decay-2 { filter: saturate(0.7); }
+.decay-3 { filter: saturate(0.55); }
+.decay-4 { filter: saturate(0.4); }
+.decay-5 { filter: saturate(0.2); }
+
+.project-card:hover {
+  filter: saturate(1.0) !important;
+}
+
+/* ========================================
+   BOTTOM ROW TILES
+   ======================================== */
+/* Data Dictionary */
+.dict-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dict-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 4px 0;
+}
+
+.dict-name { font-weight: 500; }
+.dict-check { font-size: 14px; }
+.dict-date { font-size: 12px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+.dict-date.stale { color: var(--amber); }
+.dict-date.missing { color: var(--rose); }
+
+/* Activity Feed */
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.activity-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(39,39,42,0.5);
+}
+
+.activity-entry:last-child { border-bottom: none; padding-bottom: 0; }
+
+.activity-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.activity-project {
+  font-size: 13px;
+  color: var(--blue);
+  cursor: pointer;
+}
+
+.activity-action {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* Quick Stats */
+.stat-row {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.split-bar-container { margin-bottom: 4px; }
+
+.split-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.split-work { background: var(--blue); }
+.split-personal { background: var(--green); }
+
+.split-legend {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.split-legend span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.split-legend .dot-sm {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(39,39,42,0.5);
+}
+
+.stat-item:last-child { border-bottom: none; }
+
+.stat-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* ========================================
+   LIST VIEW — TABLE
+   ======================================== */
+.list-view {
+  display: none;
+}
+
+.list-view.active { display: block; }
+.board-view.active { display: block; }
+
+.table-container {
+  overflow-x: auto;
+}
+
+.project-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.project-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.project-table th {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  background: rgba(17,17,19,0.95);
+  white-space: nowrap;
+}
+
+.project-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(39,39,42,0.4);
+  vertical-align: middle;
+}
+
+.project-table tbody tr {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.project-table tbody tr:hover {
+  background: var(--bg-card-hover);
+}
+
+.table-section-header {
+  cursor: pointer;
+  user-select: none;
+}
+
+.table-section-header td {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  padding: 16px 12px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.table-section-header .chevron {
+  display: inline-block;
+  transition: transform 0.2s ease;
+  margin-right: 6px;
+}
+
+.table-section-header.collapsed .chevron {
+  transform: rotate(-90deg);
+}
+
+.section-gate td:first-child {
+  border-left: 3px solid var(--amber);
+}
+
+.table-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.age-green { color: var(--green); }
+.age-amber { color: var(--amber); }
+.age-rose { color: var(--rose); }
+
+.table-features {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.table-progress {
+  width: 48px;
+  height: 4px;
+  background: var(--bg-elevated);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.table-progress-fill {
+  height: 100%;
+  background: var(--green);
+  border-radius: 2px;
+}
+
+.table-risk { color: var(--rose); font-weight: 600; }
+.table-dict-yes { color: var(--green); }
+.table-dict-no { color: var(--rose); }
+
+.row-stale {
+  opacity: 0.7;
+}
+
+.row-archived {
+  opacity: 0.5;
+}
+
+/* ========================================
+   DETAIL PANEL
+   ======================================== */
+.detail-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0,0,0,0.4);
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.detail-overlay.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.detail-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 50vw;
+  min-width: 400px;
+  max-width: 700px;
+  height: 100vh;
+  background: rgba(17,17,19,0.85);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border-left: 1px solid var(--border);
+  z-index: 101;
+  transform: translateX(100%);
+  transition: transform 0.3s ease;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.detail-panel.active {
+  transform: translateX(0);
+}
+
+.detail-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  transition: all 0.15s ease;
+}
+
+.detail-close:hover {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+.detail-name {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  padding-right: 40px;
+}
+
+.detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.detail-context {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.detail-section {
+  margin-bottom: 24px;
+}
+
+.detail-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.detail-feature {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 4px 0;
+  color: var(--text-secondary);
+}
+
+.feature-check { color: var(--green); }
+.feature-cross { color: var(--rose); }
+
+.detail-commit {
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(39,39,42,0.3);
+}
+
+.detail-commit:last-child { border-bottom: none; }
+
+.commit-hash {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--blue);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.commit-msg { color: var(--text-secondary); flex: 1; }
+.commit-date { color: var(--text-muted); font-size: 12px; flex-shrink: 0; }
+
+.detail-session {
+  font-size: 13px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(39,39,42,0.3);
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.detail-session:last-child { border-bottom: none; }
+
+.session-date {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+/* ========================================
+   TOAST NOTIFICATIONS
+   ======================================== */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toast {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  animation: toast-in 0.3s ease, toast-out 0.3s ease 2.5s forwards;
+  backdrop-filter: blur(12px);
+}
+
+@keyframes toast-in {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes toast-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* ========================================
+   COMING SOON OVERLAY
+   ======================================== */
+.coming-soon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  font-size: 16px;
+  color: var(--text-muted);
+}
+
+/* ========================================
+   TAB: SESSIONS
+   ======================================== */
+.permission-bar {
+  background: rgba(245,158,11,0.08);
+  border: 1px solid rgba(245,158,11,0.25);
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  backdrop-filter: blur(12px);
+  z-index: 8;
+  animation: permSlideIn 0.3s ease-out;
+}
+
+@keyframes permSlideIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.permission-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 200px;
+}
+
+.permission-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--amber);
+  animation: pulse-amber 2s infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pulse-amber {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(245,158,11,0); }
+}
+
+.permission-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.permission-text strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.permission-text code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  background: rgba(255,255,255,0.06);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--amber);
+}
+
+.permission-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-approve {
+  background: rgba(16,185,129,0.15);
+  border: 1px solid rgba(16,185,129,0.3);
+  color: var(--green);
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-approve:hover {
+  background: rgba(16,185,129,0.25);
+  border-color: var(--green);
+}
+
+.btn-deny {
+  background: rgba(244,63,94,0.15);
+  border: 1px solid rgba(244,63,94,0.3);
+  color: var(--rose);
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-deny:hover {
+  background: rgba(244,63,94,0.25);
+  border-color: var(--rose);
+}
+
+.permission-timer {
+  font-size: 12px;
+  color: var(--amber);
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 500;
+}
+
+.sessions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.session-card {
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.session-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-hover);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+
+.session-card.selected {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 1px var(--blue);
+}
+
+.session-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.session-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.session-status-dot.active {
+  background: var(--green);
+  animation: pulse-green 2s infinite;
+}
+
+.session-status-dot.waiting {
+  background: var(--amber);
+  animation: pulse-amber 2s infinite;
+}
+
+.session-status-dot.completed {
+  background: var(--text-muted);
+}
+
+@keyframes pulse-green {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(16,185,129,0); }
+}
+
+.session-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-card-path {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-badges {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.session-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.session-badge-active { background: var(--green-dim); color: var(--green); }
+.session-badge-waiting { background: var(--amber-dim); color: var(--amber); }
+.session-badge-completed { background: rgba(113,113,122,0.15); color: var(--text-muted); }
+.session-badge-sdk { background: var(--blue-dim); color: var(--blue); }
+.session-badge-working {
+  background: rgba(16,185,129,0.1);
+  color: var(--green);
+  animation: working-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes working-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.session-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(39,39,42,0.5);
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+
+.session-card-footer span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sessions-layout {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 20px;
+}
+
+.transcript-panel {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.transcript-msg {
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(39,39,42,0.4);
+}
+
+.transcript-msg:last-child {
+  border-bottom: none;
+}
+
+.transcript-role {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.transcript-role-user { color: var(--blue); }
+.transcript-role-assistant { color: var(--green); }
+.transcript-role-tool { color: var(--amber); }
+
+.transcript-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.transcript-tool-block {
+  background: rgba(245,158,11,0.06);
+  border: 1px solid rgba(245,158,11,0.15);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 6px 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--amber);
+}
+
+.thinking-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.thinking-dots span {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: thinking-bounce 1.4s ease-in-out infinite;
+}
+
+.thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes thinking-bounce {
+  0%, 80%, 100% { opacity: 0.3; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-4px); }
+}
+
+.session-activity-feed {
+  margin-top: 20px;
+}
+
+.session-activity-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 13px;
+  border-bottom: 1px solid rgba(39,39,42,0.3);
+}
+
+.session-activity-item:last-child { border-bottom: none; }
+
+.session-activity-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.session-activity-project {
+  color: var(--blue);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.session-activity-text {
+  color: var(--text-secondary);
+}
+
+/* ========================================
+   TAB: RISKS
+   ======================================== */
+.risks-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.risk-metric-box {
+  background: rgba(17,17,19,0.75);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+}
+
+.risk-metric-value {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.risk-metric-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+.risks-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.risks-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.risks-filter-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.risk-filter-pill {
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.risk-filter-pill:hover { color: var(--text-secondary); border-color: var(--border-hover); }
+.risk-filter-pill.active { color: var(--blue); background: var(--blue-dim); border-color: rgba(59,130,246,0.3); }
+
+.risk-select {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.risks-table-container {
+  overflow-x: auto;
+}
+
+.risks-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.risks-table th {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  background: rgba(17,17,19,0.95);
+  white-space: nowrap;
+}
+
+.risks-table td {
+  padding: 12px;
+  border-bottom: 1px solid rgba(39,39,42,0.4);
+  vertical-align: top;
+}
+
+.risks-table tbody tr {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.risks-table tbody tr:hover {
+  background: var(--bg-card-hover);
+}
+
+.risk-row-expanded {
+  background: rgba(255,255,255,0.02);
+}
+
+.risk-expanded-detail {
+  padding: 12px 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  border-bottom: 1px solid rgba(39,39,42,0.4);
+  display: none;
+}
+
+.risk-expanded-detail.show {
+  display: table-row;
+}
+
+.risk-status-open { display: inline-flex; padding: 2px 8px; border-radius: 8px; font-size: 11px; font-weight: 500; border: 1px solid var(--rose); color: var(--rose); background: transparent; }
+.risk-status-accepted { display: inline-flex; padding: 2px 8px; border-radius: 8px; font-size: 11px; font-weight: 500; border: 1px solid var(--amber); color: var(--amber); background: transparent; }
+.risk-status-mitigated { display: inline-flex; padding: 2px 8px; border-radius: 8px; font-size: 11px; font-weight: 500; border: 1px solid var(--green); color: var(--green); background: transparent; }
+
+.severity-critical { background: var(--rose); color: #fff; padding: 2px 8px; border-radius: 8px; font-size: 11px; font-weight: 600; display: inline-flex; }
+
+.perspective-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.perspective-finance { background: var(--blue); }
+.perspective-compliance { background: var(--amber); }
+.perspective-security { background: var(--rose); }
+.perspective-technical { background: var(--text-muted); }
+.perspective-transition { background: var(--green); }
+.perspective-product { background: #818cf8; }
+
+.btn-risk-action {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-right: 4px;
+}
+
+.btn-risk-action:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
+/* ========================================
+   TAB: ACTIVITY
+   ======================================== */
+.activity-tab-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.activity-tab-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.activity-tab-filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.activity-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 20px;
+}
+
+.timeline-container {
+  max-height: 700px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.timeline-date-header {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 16px 0 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+  position: sticky;
+  top: 0;
+  background: rgba(9,9,11,0.9);
+  backdrop-filter: blur(8px);
+  z-index: 2;
+}
+
+.timeline-date-header:first-child {
+  padding-top: 0;
+}
+
+.timeline-entry {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 0;
+  border-left: 2px solid var(--border);
+  margin-left: 6px;
+  padding-left: 16px;
+  position: relative;
+}
+
+.timeline-entry::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: 12px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+  border: 2px solid var(--bg-base);
+}
+
+.timeline-entry-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  min-width: 40px;
+}
+
+.timeline-entry-project {
+  font-size: 13px;
+  color: var(--blue);
+  font-weight: 500;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.timeline-entry-project:hover {
+  text-decoration: underline;
+}
+
+.timeline-type-badge {
+  display: inline-flex;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+.timeline-type-commit { background: var(--blue-dim); color: var(--blue); }
+.timeline-type-session { background: var(--green-dim); color: var(--green); }
+.timeline-type-status { background: var(--amber-dim); color: var(--amber); }
+
+.timeline-entry-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex: 1;
+  min-width: 0;
+}
+
+.timeline-entry-hash {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.timeline-entry-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* Heatmap */
+.heatmap-container {
+  padding: 16px;
+}
+
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: 20px repeat(12, 1fr);
+  gap: 2px;
+  margin-bottom: 12px;
+}
+
+.heatmap-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 4px;
+}
+
+.heatmap-month-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  grid-column: span 1;
+}
+
+.heatmap-cell {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--bg-card);
+}
+
+.heatmap-level-0 { background: var(--bg-card); }
+.heatmap-level-1 { background: rgba(16,185,129,0.2); }
+.heatmap-level-2 { background: rgba(16,185,129,0.4); }
+.heatmap-level-3 { background: rgba(16,185,129,0.7); }
+.heatmap-level-4 { background: #10b981; }
+
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.heatmap-legend-cell {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+.activity-stats-box {
+  margin-top: 16px;
+  padding: 16px;
+  background: rgba(255,255,255,0.02);
+  border-radius: 8px;
+}
+
+.activity-stats-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--text-primary);
+}
+
+.activity-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.activity-stat-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* ========================================
+   TAB: AUDIT
+   ======================================== */
+.audit-health-score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.health-gauge {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  margin-bottom: 12px;
+}
+
+.health-gauge svg {
+  transform: rotate(-90deg);
+}
+
+.health-gauge-bg {
+  fill: none;
+  stroke: var(--bg-elevated);
+  stroke-width: 10;
+}
+
+.health-gauge-fill {
+  fill: none;
+  stroke-width: 10;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1s ease;
+}
+
+.health-gauge-value {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.health-gauge-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.health-gauge-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  max-width: 360px;
+}
+
+.audit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.audit-tile {
+  padding: 20px;
+}
+
+.audit-tile-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.audit-tile-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.audit-tile-score {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.audit-progress-bar {
+  height: 6px;
+  background: var(--bg-elevated);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.audit-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.audit-table th {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.audit-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(39,39,42,0.3);
+  color: var(--text-secondary);
+}
+
+.audit-pill {
+  display: inline-flex;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.audit-pill-current { background: var(--green-dim); color: var(--green); }
+.audit-pill-stale { background: var(--amber-dim); color: var(--amber); }
+.audit-pill-missing { background: var(--rose-dim); color: var(--rose); }
+.audit-pill-fresh { background: var(--green-dim); color: var(--green); }
+.audit-pill-verystale { background: var(--rose-dim); color: var(--rose); }
+
+.audit-feature-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.audit-feature-name {
+  font-size: 13px;
+  font-weight: 500;
+  min-width: 160px;
+  flex-shrink: 0;
+}
+
+.audit-feature-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-elevated);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.audit-feature-fill {
+  height: 100%;
+  border-radius: 3px;
+}
+
+.audit-feature-pct {
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-muted);
+  min-width: 36px;
+  text-align: right;
+}
+
+.audit-risk-bars {
+  margin-top: 12px;
+}
+
+.audit-risk-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.audit-risk-bar-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-width: 80px;
+}
+
+.audit-risk-bar {
+  flex: 1;
+  height: 8px;
+  background: var(--bg-elevated);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.audit-risk-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+}
+
+.audit-risk-bar-count {
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-muted);
+  min-width: 20px;
+}
+
+.audit-link {
+  color: var(--blue);
+  cursor: pointer;
+  font-size: 13px;
+  margin-top: 12px;
+  display: inline-block;
+}
+
+.audit-link:hover {
+  text-decoration: underline;
+}
+
+.freshness-counts {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.freshness-count {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.freshness-count-value {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.freshness-count-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
+}
+
+/* ========================================
+   RESPONSIVE
+   ======================================== */
+@media (max-width: 900px) {
+  .bento-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tile-gate, .tile-portfolio, .tile-stale, .tile-risks, .tile-projects, .tile-third {
+    grid-column: span 1;
+  }
+
+  .metrics-group { display: none; }
+
+  .detail-panel {
+    width: 90vw;
+    min-width: unset;
+  }
+
+  .table-container {
+    overflow-x: scroll;
+  }
+
+  .projects-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-row {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .sessions-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  .activity-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  .audit-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .risks-metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .risks-filter-bar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .activity-tab-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .sessions-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ========================================
+   SCROLLBAR
+   ======================================== */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover);
+}
+</style>
+</head>
+<body>
+
+<!-- Aurora Background -->
+<div class="aurora">
+  <div class="aurora-blob aurora-blob-1"></div>
+  <div class="aurora-blob aurora-blob-2"></div>
+  <div class="aurora-blob aurora-blob-3"></div>
+</div>
+
+<!-- Metrics Bar -->
+<div class="metrics-bar">
+  <div class="metrics-bar-brand">
+    <span class="dot"></span>
+    Command Centre
+  </div>
+  <div class="metrics-group">
+    <div class="metric-item">
+      <span class="metric-value" style="color:var(--text-secondary)">39</span>
+      <span class="metric-label">Projects</span>
+    </div>
+    <div class="metric-item">
+      <span class="metric-value" style="color:var(--green)">6</span>
+      <span class="metric-label">Active</span>
+    </div>
+    <div class="metric-item">
+      <span class="metric-value" style="color:var(--amber)">3</span>
+      <span class="metric-label">Stale</span>
+    </div>
+    <div class="metric-item">
+      <span class="metric-value" style="color:var(--blue)">2</span>
+      <span class="metric-label">At Gate</span>
+    </div>
+    <div class="metric-item">
+      <span class="metric-value" style="color:var(--rose)">1</span>
+      <span class="metric-label">Risks</span>
+    </div>
+  </div>
+  <div class="metrics-bar-actions">
+    <button class="btn btn-sm" id="autoApproveBtn">Auto-Approve</button>
+    <button class="btn btn-sm">Ctrl+K</button>
+    <button class="btn btn-sm btn-primary">+ New Session</button>
+  </div>
+</div>
+
+<!-- Navigation -->
+<div class="nav-section">
+  <div class="nav-tabs">
+    <div class="nav-tab" data-tab="sessions">Sessions <span class="tab-badge" id="sessionsBadge">1</span></div>
+    <div class="nav-tab active" data-tab="portfolio">Portfolio</div>
+    <div class="nav-tab" data-tab="risks">Risks</div>
+    <div class="nav-tab" data-tab="activity">Activity</div>
+    <div class="nav-tab" data-tab="audit">Audit</div>
+  </div>
+  <div class="filter-row">
+    <!-- Sessions filters -->
+    <div class="tab-filters" id="filters-sessions" style="display:none">
+      <div class="filter-pills">
+        <div class="pill active">All</div>
+        <div class="pill">Active</div>
+        <div class="pill">Waiting</div>
+        <div class="pill">Completed</div>
+      </div>
+      <div class="filter-right">
+        <span class="filter-hint">4 sessions</span>
+      </div>
+    </div>
+    <!-- Portfolio filters -->
+    <div class="tab-filters" id="filters-portfolio">
+      <div class="filter-pills">
+        <div class="pill active" data-filter="all">All</div>
+        <div class="pill" data-filter="work">Work</div>
+        <div class="pill" data-filter="personal">Personal</div>
+        <div class="pill" data-filter="stale">Stale</div>
+        <div class="pill" data-filter="gate">At Gate</div>
+      </div>
+      <div class="filter-right">
+        <div class="view-toggle">
+          <button class="btn-toggle active" data-view="board">Board</button>
+          <button class="btn-toggle" data-view="list">List</button>
+        </div>
+      </div>
+    </div>
+    <!-- Risks filters -->
+    <div class="tab-filters" id="filters-risks" style="display:none">
+      <div class="filter-pills">
+        <div class="risk-filter-pill active" data-rfilter="status" data-val="all" onclick="toggleRiskFilter(this,'status')">All</div>
+        <div class="risk-filter-pill" data-rfilter="status" data-val="open" onclick="toggleRiskFilter(this,'status')">Open</div>
+        <div class="risk-filter-pill" data-rfilter="status" data-val="accepted" onclick="toggleRiskFilter(this,'status')">Accepted</div>
+        <div class="risk-filter-pill" data-rfilter="status" data-val="mitigated" onclick="toggleRiskFilter(this,'status')">Mitigated</div>
+      </div>
+      <div class="filter-right">
+        <select class="risk-select" onchange="filterRisks()" style="font-size:12px">
+          <option>All Projects</option>
+          <option>Command Centre</option>
+          <option>Holiday System</option>
+          <option>outlook-mcp</option>
+          <option>family-hub</option>
+          <option>Thingsboard Integration</option>
+          <option>CIR</option>
+        </select>
+      </div>
+    </div>
+    <!-- Activity filters -->
+    <div class="tab-filters" id="filters-activity" style="display:none">
+      <div class="filter-pills">
+        <div class="pill" data-afilter="date" data-val="today" onclick="toggleActivityFilter(this,'date')">Today</div>
+        <div class="pill active" data-afilter="date" data-val="week" onclick="toggleActivityFilter(this,'date')">This Week</div>
+        <div class="pill" data-afilter="date" data-val="month" onclick="toggleActivityFilter(this,'date')">This Month</div>
+        <div class="pill" data-afilter="date" data-val="all" onclick="toggleActivityFilter(this,'date')">All Time</div>
+      </div>
+      <div class="filter-right">
+        <select class="risk-select" style="font-size:12px">
+          <option>All Projects</option>
+          <option>Command Centre</option>
+          <option>family-hub</option>
+          <option>claude-workspace</option>
+          <option>outlook-mcp</option>
+          <option>Happy Coder</option>
+          <option>Thingsboard Integration</option>
+          <option>ITSM</option>
+        </select>
+        <div class="filter-pills" style="margin-left:8px">
+          <div class="pill active" data-afilter="type" data-val="all" onclick="toggleActivityFilter(this,'type')">All</div>
+          <div class="pill" data-afilter="type" data-val="commits" onclick="toggleActivityFilter(this,'type')">Commits</div>
+          <div class="pill" data-afilter="type" data-val="sessions" onclick="toggleActivityFilter(this,'type')">Sessions</div>
+        </div>
+      </div>
+    </div>
+    <!-- Audit filters -->
+    <div class="tab-filters" id="filters-audit" style="display:none">
+      <div class="filter-pills">
+        <div class="pill active">All Categories</div>
+        <div class="pill">Data Dictionaries</div>
+        <div class="pill">Status Files</div>
+        <div class="pill">Feature Lists</div>
+        <div class="pill">Risk Exposure</div>
+      </div>
+      <div class="filter-right">
+        <span class="filter-hint">Portfolio health: 72%</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Global Permission Bar (visible on ALL tabs) -->
+<div class="permission-bar" id="globalPermissionBar">
+  <div class="permission-bar-left">
+    <div class="permission-dot"></div>
+    <div class="permission-text">
+      <strong>outlook-mcp</strong> needs permission: <code>Bash</code> &mdash; <code>npm install express</code>
+    </div>
+  </div>
+  <div class="permission-actions">
+    <button class="btn-approve" onclick="approvePermission()">Approve</button>
+    <button class="btn-deny" onclick="denyPermission()">Deny</button>
+    <span class="permission-timer" id="permissionTimer">28s</span>
+  </div>
+</div>
+
+<!-- Main Content -->
+<div class="main-content">
+  <!-- Tab Content: Portfolio -->
+  <div id="tab-portfolio">
+
+    <!-- BOARD VIEW -->
+    <div class="board-view active" id="boardView">
+      <div class="bento-grid">
+
+        <!-- ROW 1: Gate Queue + Portfolio Overview -->
+        <div class="glass tile-gate">
+          <div class="tile-header">
+            <span class="tile-dot" style="background:var(--amber)"></span>
+            SteerCo Gate Queue
+          </div>
+          <div class="glass-tint">
+            <div class="gate-item">
+              <div class="gate-info">
+                <div class="gate-project">Holiday System</div>
+                <div class="gate-meta">
+                  <span class="gate-type">Design Gate</span>
+                  <span>Reached: 2026-04-15</span>
+                  <span class="staleness-badge staleness-amber">3 days waiting</span>
+                </div>
+              </div>
+              <div class="gate-actions">
+                <button class="btn btn-sm" onclick="showToast('Opening review.html...')">Open Review</button>
+                <button class="btn btn-sm btn-primary" onclick="showToast('Launching session...')">Launch Session</button>
+              </div>
+            </div>
+          </div>
+          <div class="glass-tint">
+            <div class="gate-item">
+              <div class="gate-info">
+                <div class="gate-project">Zendesk Integration</div>
+                <div class="gate-meta">
+                  <span class="gate-type">Pre-deployment Gate</span>
+                  <span>Reached: 2026-04-17</span>
+                  <span class="staleness-badge staleness-amber">1 day waiting</span>
+                </div>
+              </div>
+              <div class="gate-actions">
+                <button class="btn btn-sm" onclick="showToast('Opening review.html...')">Open Review</button>
+                <button class="btn btn-sm btn-primary" onclick="showToast('Launching session...')">Launch Session</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass tile-portfolio">
+          <div class="tile-header">Portfolio Overview</div>
+          <div class="portfolio-metrics">
+            <div class="portfolio-metric">
+              <span class="value" style="color:var(--text-secondary)">39</span>
+              <span class="label">Total</span>
+            </div>
+            <div class="portfolio-metric">
+              <span class="value" style="color:var(--green)">6</span>
+              <span class="label">Active</span>
+            </div>
+            <div class="portfolio-metric">
+              <span class="value" style="color:var(--amber)">3</span>
+              <span class="label">Stale</span>
+            </div>
+            <div class="portfolio-metric">
+              <span class="value" style="color:var(--blue)">2</span>
+              <span class="label">At Gate</span>
+            </div>
+            <div class="portfolio-metric">
+              <span class="value" style="color:var(--rose)">1</span>
+              <span class="label">Open Risk</span>
+            </div>
+            <div class="portfolio-metric">
+              <span class="value" style="color:var(--text-muted)">14</span>
+              <span class="label">Archived</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ROW 2: Stale + Risks -->
+        <div class="glass tile-stale">
+          <div class="tile-header">
+            <span style="margin-right:2px">&#9888;</span> Needs Attention <span class="count">(3 projects)</span>
+          </div>
+          <div class="stale-item">
+            <div class="stale-top">
+              <span class="stale-name">IOT Admin</span>
+              <span class="status-pill status-active">Active</span>
+            </div>
+            <div class="stale-bottom">
+              <span class="stale-meta">Last active: 2026-03-10</span>
+              <span class="staleness-badge staleness-amber">39 days</span>
+              <span class="stale-meta">0/12 features</span>
+            </div>
+            <div class="heat-trail" data-pattern="stale-old"></div>
+            <div style="text-align:right;margin-top:4px">
+              <button class="btn btn-sm" onclick="showToast('Launching session...')">Launch Session</button>
+            </div>
+          </div>
+          <div class="stale-item">
+            <div class="stale-top">
+              <span class="stale-name">Figma Integration</span>
+              <span class="status-pill status-active">Active</span>
+            </div>
+            <div class="stale-bottom">
+              <span class="stale-meta">Last active: 2026-03-02</span>
+              <span class="staleness-badge staleness-rose">47 days</span>
+              <span class="stale-meta">3/8 features</span>
+            </div>
+            <div class="heat-trail" data-pattern="stale-very-old"></div>
+            <div style="text-align:right;margin-top:4px">
+              <button class="btn btn-sm" onclick="showToast('Launching session...')">Launch Session</button>
+            </div>
+          </div>
+          <div class="stale-item">
+            <div class="stale-top">
+              <span class="stale-name">HR System</span>
+              <span class="status-pill status-planning">RFP Phase</span>
+            </div>
+            <div class="stale-bottom">
+              <span class="stale-meta">Last active: 2026-02-28</span>
+              <span class="staleness-badge staleness-rose">49 days</span>
+            </div>
+            <div class="heat-trail" data-pattern="stale-very-old"></div>
+            <div style="text-align:right;margin-top:4px">
+              <button class="btn btn-sm" onclick="showToast('Launching session...')">Launch Session</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass tile-risks" style="background:rgba(17,17,19,0.75);">
+          <div class="tile-header">
+            <span class="tile-dot" style="background:var(--rose)"></span>
+            Risk Register <span class="count">(3 open)</span>
+          </div>
+          <div class="risk-item">
+            <div class="risk-row">
+              <span class="risk-id">R001</span>
+              <span class="risk-project">Command Centre</span>
+              <span class="risk-perspective">Security</span>
+              <span class="severity-pill severity-medium">Medium</span>
+              <span class="risk-status">Open</span>
+            </div>
+            <div class="risk-desc">No authentication on dashboard -- network access can approve permissions</div>
+          </div>
+          <div class="risk-item">
+            <div class="risk-row">
+              <span class="risk-id">R002</span>
+              <span class="risk-project">Holiday System</span>
+              <span class="risk-perspective">Compliance</span>
+              <span class="severity-pill severity-high">High</span>
+              <span class="risk-status">Open</span>
+            </div>
+            <div class="risk-desc">Employee data handling not reviewed against GDPR requirements</div>
+          </div>
+          <div class="risk-item">
+            <div class="risk-row">
+              <span class="risk-id">R003</span>
+              <span class="risk-project">family-hub</span>
+              <span class="risk-perspective">Technical</span>
+              <span class="severity-pill severity-low">Low</span>
+              <span class="risk-status">Accepted</span>
+            </div>
+            <div class="risk-desc">SQLite on Pi -- no automated backup strategy</div>
+          </div>
+        </div>
+
+        <!-- ROW 3: Project Cards -->
+        <div class="tile-projects" style="background:transparent;border:none;padding:0;">
+          <div class="tile-header" style="padding:0 0 4px 0;">All Projects <span class="count">(10)</span></div>
+          <div class="projects-grid" id="projectsGrid">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <!-- ROW 4: Data Dict + Activity + Quick Stats -->
+        <div class="glass tile-third">
+          <div class="tile-header">Data Dictionary Audit</div>
+          <div class="dict-list">
+            <div class="dict-row"><span class="dict-name">Command Centre</span><span><span class="dict-check" style="color:var(--green)">&#10003;</span> <span class="dict-date">2026-04-16</span></span></div>
+            <div class="dict-row"><span class="dict-name">family-hub</span><span><span class="dict-check" style="color:var(--green)">&#10003;</span> <span class="dict-date">2026-04-10</span></span></div>
+            <div class="dict-row"><span class="dict-name">Holiday System</span><span><span class="dict-check" style="color:var(--green)">&#10003;</span> <span class="dict-date stale">2026-03-15</span></span></div>
+            <div class="dict-row"><span class="dict-name">Thingsboard</span><span><span class="dict-check" style="color:var(--green)">&#10003;</span> <span class="dict-date">2026-04-14</span></span></div>
+            <div class="dict-row"><span class="dict-name">CIR</span><span><span class="dict-check" style="color:var(--green)">&#10003;</span> <span class="dict-date">2026-04-14</span></span></div>
+            <div class="dict-row"><span class="dict-name">ITSM</span><span><span class="dict-check" style="color:var(--rose)">&#10007;</span> <span class="dict-date missing">Missing</span></span></div>
+            <div class="dict-row"><span class="dict-name">IOT Admin</span><span><span class="dict-check" style="color:var(--rose)">&#10007;</span> <span class="dict-date missing">Missing</span></span></div>
+            <div class="dict-row"><span class="dict-name">outlook-mcp</span><span><span class="dict-check" style="color:var(--rose)">&#10007;</span> <span class="dict-date missing">Missing</span></span></div>
+            <div class="dict-row"><span class="dict-name">Figma Integration</span><span><span class="dict-check" style="color:var(--green)">&#10003;</span> <span class="dict-date stale">2026-03-01</span></span></div>
+            <div class="dict-row"><span class="dict-name">HR System</span><span><span class="dict-check" style="color:var(--rose)">&#10007;</span> <span class="dict-date missing">Missing</span></span></div>
+          </div>
+        </div>
+
+        <div class="glass tile-third">
+          <div class="tile-header">Recent Activity</div>
+          <div class="activity-list">
+            <div class="activity-entry">
+              <span class="activity-time">2026-04-17 14:22</span>
+              <span class="activity-project">Command Centre</span>
+              <span class="activity-action">Committed v0.2.0 release</span>
+            </div>
+            <div class="activity-entry">
+              <span class="activity-time">2026-04-17 11:05</span>
+              <span class="activity-project">claude-workspace</span>
+              <span class="activity-action">Updated launcher settings sync</span>
+            </div>
+            <div class="activity-entry">
+              <span class="activity-time">2026-04-16 16:30</span>
+              <span class="activity-project">family-hub</span>
+              <span class="activity-action">Phase 2 meal planning UI complete</span>
+            </div>
+            <div class="activity-entry">
+              <span class="activity-time">2026-04-16 09:15</span>
+              <span class="activity-project">Happy Coder</span>
+              <span class="activity-action">Added push notification relay</span>
+            </div>
+            <div class="activity-entry">
+              <span class="activity-time">2026-04-15 13:40</span>
+              <span class="activity-project">outlook-mcp</span>
+              <span class="activity-action">Fixed calendar event parsing</span>
+            </div>
+            <div class="activity-entry">
+              <span class="activity-time">2026-04-14 17:20</span>
+              <span class="activity-project">Thingsboard</span>
+              <span class="activity-action">Device API endpoint mapping</span>
+            </div>
+            <div class="activity-entry">
+              <span class="activity-time">2026-04-14 10:00</span>
+              <span class="activity-project">CIR</span>
+              <span class="activity-action">Updated Pi service addresses</span>
+            </div>
+            <div class="activity-entry">
+              <span class="activity-time">2026-04-12 15:45</span>
+              <span class="activity-project">ITSM</span>
+              <span class="activity-action">Ticket form validation complete</span>
+            </div>
+            <div class="activity-entry">
+              <span class="activity-time">2026-04-10 11:30</span>
+              <span class="activity-project">Kia Complaint</span>
+              <span class="activity-action">Added FCA complaint template</span>
+            </div>
+            <div class="activity-entry">
+              <span class="activity-time">2026-04-08 09:00</span>
+              <span class="activity-project">Jira Integration</span>
+              <span class="activity-action">OAuth token refresh fix</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass tile-third">
+          <div class="tile-header">This Week</div>
+          <div class="stat-row">
+            <div class="split-bar-container">
+              <div class="split-bar">
+                <div class="split-work" style="width:61.5%"></div>
+                <div class="split-personal" style="width:38.5%"></div>
+              </div>
+              <div class="split-legend">
+                <span><span class="dot-sm" style="background:var(--blue)"></span> Work: 24</span>
+                <span><span class="dot-sm" style="background:var(--green)"></span> Personal: 15</span>
+              </div>
+            </div>
+            <div class="stat-item">
+              <span>Most Active</span>
+              <span class="stat-value" style="color:var(--blue);font-size:13px;font-family:'Inter',sans-serif;font-weight:600">Command Centre</span>
+            </div>
+            <div class="stat-item">
+              <span>Sessions This Week</span>
+              <span class="stat-value">14</span>
+            </div>
+            <div class="stat-item">
+              <span>Features Completed</span>
+              <span class="stat-value">8</span>
+            </div>
+            <div class="stat-item">
+              <span>Commits</span>
+              <span class="stat-value">23</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- LIST VIEW -->
+    <div class="list-view" id="listView">
+      <div class="glass" style="padding:0;overflow:hidden;">
+        <div class="table-container">
+          <table class="project-table">
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Project</th>
+                <th>Type</th>
+                <th>Last Active</th>
+                <th>Age</th>
+                <th>Gate</th>
+                <th>Features</th>
+                <th>Risks</th>
+                <th>Dict</th>
+                <th>Activity (30d)</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody">
+              <!-- Populated by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============================== -->
+  <!-- TAB: SESSIONS                 -->
+  <!-- ============================== -->
+  <div id="tab-sessions" style="display:none">
+
+    <!-- Session Cards + Transcript -->
+    <div class="sessions-layout" id="sessionsLayout">
+      <div>
+        <div class="sessions-grid" id="sessionsGrid">
+          <!-- Session 1 -->
+          <div class="glass session-card selected" onclick="selectSession(0, this)">
+            <div class="session-card-header">
+              <div class="session-status-dot active"></div>
+              <div class="session-card-name">Command Centre &mdash; Portfolio Extension</div>
+            </div>
+            <div class="session-card-path">Work/Claude Agents/Command Centre</div>
+            <div class="session-badges">
+              <span class="session-badge session-badge-active">Active</span>
+              <span class="session-badge session-badge-sdk">SDK-managed</span>
+              <span class="session-badge session-badge-working">Working</span>
+            </div>
+            <div class="session-card-footer">
+              <span>45m elapsed</span>
+              <span>12,450 tokens</span>
+              <span>$0.42</span>
+              <span>3 files</span>
+              <span>8 tools</span>
+            </div>
+          </div>
+
+          <!-- Session 2 -->
+          <div class="glass session-card" onclick="selectSession(1, this)">
+            <div class="session-card-header">
+              <div class="session-status-dot waiting"></div>
+              <div class="session-card-name">outlook-mcp &mdash; OAuth Fix</div>
+            </div>
+            <div class="session-card-path">Personal/outlook-mcp</div>
+            <div class="session-badges">
+              <span class="session-badge session-badge-waiting">Waiting for Permission</span>
+            </div>
+            <div class="session-card-footer">
+              <span>22m elapsed</span>
+              <span>8,200 tokens</span>
+              <span>$0.28</span>
+              <span>1 file</span>
+              <span>5 tools</span>
+            </div>
+          </div>
+
+          <!-- Session 3 -->
+          <div class="glass session-card" onclick="selectSession(2, this)">
+            <div class="session-card-header">
+              <div class="session-status-dot active"></div>
+              <div class="session-card-name">family-hub &mdash; Phase 2 Meals</div>
+            </div>
+            <div class="session-card-path">Personal/family-hub</div>
+            <div class="session-badges">
+              <span class="session-badge session-badge-active">Active</span>
+              <span class="session-badge session-badge-sdk">SDK-managed</span>
+              <span class="session-badge session-badge-working">Working</span>
+            </div>
+            <div class="session-card-footer">
+              <span>1h 15m elapsed</span>
+              <span>34,100 tokens</span>
+              <span>$1.15</span>
+              <span>7 files</span>
+              <span>22 tools</span>
+            </div>
+          </div>
+
+          <!-- Session 4 -->
+          <div class="glass session-card" onclick="selectSession(3, this)">
+            <div class="session-card-header">
+              <div class="session-status-dot completed"></div>
+              <div class="session-card-name">ITSM &mdash; Ticket Validation</div>
+            </div>
+            <div class="session-card-path">Work/ITSM</div>
+            <div class="session-badges">
+              <span class="session-badge session-badge-completed">Completed 2h ago</span>
+            </div>
+            <div class="session-card-footer">
+              <span>48m elapsed</span>
+              <span>18,500 tokens</span>
+              <span>$0.62</span>
+              <span>5 files</span>
+              <span>14 tools</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Activity Feed -->
+        <div class="glass session-activity-feed">
+          <div class="tile-header">Session Activity</div>
+          <div class="session-activity-item">
+            <span class="session-activity-time">14:22</span>
+            <span class="session-activity-project">Command Centre</span>
+            <span class="session-activity-text">Approved: Bash (npm run build)</span>
+          </div>
+          <div class="session-activity-item">
+            <span class="session-activity-time">14:20</span>
+            <span class="session-activity-project">outlook-mcp</span>
+            <span class="session-activity-text">Permission requested: Bash (npm install express)</span>
+          </div>
+          <div class="session-activity-item">
+            <span class="session-activity-time">14:18</span>
+            <span class="session-activity-project">Command Centre</span>
+            <span class="session-activity-text">Approved: Edit (scanner.ts)</span>
+          </div>
+          <div class="session-activity-item">
+            <span class="session-activity-time">14:15</span>
+            <span class="session-activity-project">family-hub</span>
+            <span class="session-activity-text">Auto-approved: Read (package.json)</span>
+          </div>
+          <div class="session-activity-item">
+            <span class="session-activity-time">14:10</span>
+            <span class="session-activity-project">ITSM</span>
+            <span class="session-activity-text">Session completed</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Transcript Panel -->
+      <div class="glass transcript-panel" id="transcriptPanel">
+        <div class="tile-header">Transcript &mdash; Command Centre</div>
+        <div id="transcriptContent">
+          <div class="transcript-msg">
+            <div class="transcript-role transcript-role-user">User</div>
+            <div class="transcript-text">Add the portfolio scanner service</div>
+          </div>
+          <div class="transcript-msg">
+            <div class="transcript-role transcript-role-assistant">Assistant</div>
+            <div class="transcript-text">I'll create the portfolio scanner. Let me start by reading the existing architecture...</div>
+          </div>
+          <div class="transcript-msg">
+            <div class="transcript-role transcript-role-tool">Tool Use</div>
+            <div class="transcript-tool-block">Read ARCHITECTURE.md</div>
+          </div>
+          <div class="transcript-msg">
+            <div class="transcript-role transcript-role-assistant">Assistant</div>
+            <div class="transcript-text">Now I'll create the scanner service. The architecture uses a modular pattern with services registered in the main index. I'll create <code>src/services/portfolio-scanner.ts</code> with the following approach:
+
+1. Scan all project directories for PROJECT_STATUS.md
+2. Parse status, last active date, and features
+3. Aggregate into a portfolio health summary
+4. Emit events for the dashboard to consume</div>
+          </div>
+          <div class="thinking-indicator">
+            <div class="thinking-dots"><span></span><span></span><span></span></div>
+            <span>Working...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== -->
+  <!-- TAB: RISKS                     -->
+  <!-- ============================== -->
+  <div id="tab-risks" style="display:none">
+
+    <!-- Risk Summary Metrics -->
+    <div class="risks-metrics">
+      <div class="risk-metric-box">
+        <div class="risk-metric-value" style="color:var(--rose)">5</div>
+        <div class="risk-metric-label">Open</div>
+      </div>
+      <div class="risk-metric-box">
+        <div class="risk-metric-value" style="color:var(--amber)">2</div>
+        <div class="risk-metric-label">Accepted</div>
+      </div>
+      <div class="risk-metric-box">
+        <div class="risk-metric-value" style="color:var(--green)">3</div>
+        <div class="risk-metric-label">Mitigated</div>
+      </div>
+      <div class="risk-metric-box">
+        <div class="risk-metric-value" style="color:var(--text-secondary)">10</div>
+        <div class="risk-metric-label">Total</div>
+      </div>
+    </div>
+
+    <!-- Risk Table -->
+    <div class="glass" style="padding:0;overflow:hidden;">
+      <div class="risks-table-container">
+        <table class="risks-table" id="risksTable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Date Raised</th>
+              <th>Project</th>
+              <th>Perspective</th>
+              <th>Severity</th>
+              <th>Status</th>
+              <th>Description</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="risksTableBody">
+            <!-- Populated by JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== -->
+  <!-- TAB: ACTIVITY                  -->
+  <!-- ============================== -->
+  <div id="tab-activity" style="display:none">
+
+    <!-- Timeline + Heatmap -->
+    <div class="activity-layout" id="activityLayout">
+      <!-- LEFT: Timeline -->
+      <div class="glass" style="padding:0;">
+        <div class="timeline-container" style="padding:16px;">
+
+          <!-- Today -->
+          <div class="timeline-date-header">Today &mdash; 2026-04-18</div>
+          <div class="timeline-entry">
+            <span class="timeline-entry-time">09:30</span>
+            <span class="timeline-entry-project" onclick="openDetail('Command Centre')">Command Centre</span>
+            <span class="timeline-type-badge timeline-type-session">SESSION</span>
+            <span class="timeline-entry-desc">Portfolio design session started</span>
+          </div>
+
+          <!-- Yesterday -->
+          <div class="timeline-date-header">Yesterday &mdash; 2026-04-17</div>
+          <div class="timeline-entry">
+            <span class="timeline-entry-time">14:22</span>
+            <span class="timeline-entry-project" onclick="openDetail('Command Centre')">Command Centre</span>
+            <span class="timeline-type-badge timeline-type-commit">COMMIT</span>
+            <span class="timeline-entry-desc">v0.2.0: Auto-approve, persistence, watchdog, accurate tokens</span>
+            <span class="timeline-entry-hash">cadcde4</span>
+          </div>
+          <div class="timeline-entry">
+            <span class="timeline-entry-time">13:45</span>
+            <span class="timeline-entry-project" onclick="openDetail('Command Centre')">Command Centre</span>
+            <span class="timeline-type-badge timeline-type-session">SESSION</span>
+            <span class="timeline-entry-desc">Harness session: backlog build (B010-B017)</span>
+            <span class="timeline-entry-meta">3h 20m &middot; 45,200 tokens</span>
+          </div>
+          <div class="timeline-entry">
+            <span class="timeline-entry-time">11:05</span>
+            <span class="timeline-entry-project">claude-workspace</span>
+            <span class="timeline-type-badge timeline-type-commit">COMMIT</span>
+            <span class="timeline-entry-desc">Update launcher settings sync for CC hooks</span>
+            <span class="timeline-entry-hash">a3f21bc</span>
+          </div>
+          <div class="timeline-entry">
+            <span class="timeline-entry-time">10:30</span>
+            <span class="timeline-entry-project">claude-workspace</span>
+            <span class="timeline-type-badge timeline-type-session">SESSION</span>
+            <span class="timeline-entry-desc">Hook template update</span>
+            <span class="timeline-entry-meta">35m &middot; 8,400 tokens</span>
+          </div>
+
+          <!-- 2026-04-16 -->
+          <div class="timeline-date-header">2026-04-16</div>
+          <div class="timeline-entry">
+            <span class="timeline-entry-time">16:30</span>
+            <span class="timeline-entry-project">family-hub</span>
+            <span class="timeline-type-badge timeline-type-commit">COMMIT</span>
+            <span class="timeline-entry-desc">Phase 2: meal planning UI complete</span>
+            <span class="timeline-entry-hash">e7c4d21</span>
+          </div>
+          <div class="timeline-entry">
+            <span class="timeline-entry-time">15:00</span>
+            <span class="timeline-entry-project">family-hub</span>
+            <span class="timeline-type-badge timeline-type-session">SESSION</span>
+            <span class="timeline-entry-desc">Meal planning feature build</span>
+            <span class="timeline-entry-meta">2h 45m &middot; 38,000 tokens</span>
+          </div>
+          <div class="timeline-entry">
+            <span class="timeline-entry-time">09:15</span>
+            <span class="timeline-entry-project">Happy Coder</span>
+            <span class="timeline-type-badge timeline-type-commit">COMMIT</span>
+            <span class="timeline-entry-desc">Add push notification relay endpoint</span>
+            <span class="timeline-entry-hash">b4e8f12</span>
+          </div>
+          <div class="timeline-entry">
+            <span class="timeline-entry-time">09:00</span>
+            <span class="timeline-entry-project">Happy Coder</span>
+            <span class="timeline-type-badge timeline-type-session">SESSION</span>
+            <span class="timeline-entry-desc">Push notification integration</span>
+            <span class="timeline-entry-meta">1h 15m &middot; 15,600 tokens</span>
+          </div>
+
+          <!-- 2026-04-15 -->
+          <div class="timeline-date-header">2026-04-15</div>
+          <div class="timeline-entry">
+            <span class="timeline-entry-time">13:40</span>
+            <span class="timeline-entry-project">outlook-mcp</span>
+            <span class="timeline-type-badge timeline-type-commit">COMMIT</span>
+            <span class="timeline-entry-desc">Fix calendar event recurrence parsing</span>
+            <span class="timeline-entry-hash">d9a3e45</span>
+          </div>
+          <div class="timeline-entry">
+            <span class="timeline-entry-time">13:00</span>
+            <span class="timeline-entry-project">outlook-mcp</span>
+            <span class="timeline-type-badge timeline-type-session">SESSION</span>
+            <span class="timeline-entry-desc">Calendar parser bug fix</span>
+            <span class="timeline-entry-meta">40m &middot; 9,200 tokens</span>
+          </div>
+          <div class="timeline-entry">
+            <span class="timeline-entry-time">11:20</span>
+            <span class="timeline-entry-project" onclick="openDetail('Command Centre')">Command Centre</span>
+            <span class="timeline-type-badge timeline-type-commit">COMMIT</span>
+            <span class="timeline-entry-desc">Fix terminal focus + per-session tokens</span>
+            <span class="timeline-entry-hash">c9bc451</span>
+          </div>
+          <div class="timeline-entry">
+            <span class="timeline-entry-time">10:00</span>
+            <span class="timeline-entry-project" onclick="openDetail('Command Centre')">Command Centre</span>
+            <span class="timeline-type-badge timeline-type-session">SESSION</span>
+            <span class="timeline-entry-desc">Terminal focus debugging</span>
+            <span class="timeline-entry-meta">1h 20m &middot; 22,300 tokens</span>
+          </div>
+
+          <!-- 2026-04-14 -->
+          <div class="timeline-date-header">2026-04-14</div>
+          <div class="timeline-entry">
+            <span class="timeline-entry-time">17:20</span>
+            <span class="timeline-entry-project" onclick="openDetail('Thingsboard Integration')">Thingsboard Integration</span>
+            <span class="timeline-type-badge timeline-type-commit">COMMIT</span>
+            <span class="timeline-entry-desc">Device API endpoint mapping</span>
+            <span class="timeline-entry-hash">f2d1a78</span>
+          </div>
+          <div class="timeline-entry">
+            <span class="timeline-entry-time">10:00</span>
+            <span class="timeline-entry-project">CIR</span>
+            <span class="timeline-type-badge timeline-type-commit">COMMIT</span>
+            <span class="timeline-entry-desc">Update Pi service addresses for Docker migration</span>
+            <span class="timeline-entry-hash">8c5e3b1</span>
+          </div>
+
+          <!-- 2026-04-12 -->
+          <div class="timeline-date-header">2026-04-12</div>
+          <div class="timeline-entry">
+            <span class="timeline-entry-time">15:45</span>
+            <span class="timeline-entry-project" onclick="openDetail('ITSM')">ITSM</span>
+            <span class="timeline-type-badge timeline-type-commit">COMMIT</span>
+            <span class="timeline-entry-desc">Ticket form validation and submission flow</span>
+            <span class="timeline-entry-hash">3b7c9d2</span>
+          </div>
+          <div class="timeline-entry">
+            <span class="timeline-entry-time">14:00</span>
+            <span class="timeline-entry-project" onclick="openDetail('ITSM')">ITSM</span>
+            <span class="timeline-type-badge timeline-type-session">SESSION</span>
+            <span class="timeline-entry-desc">Form validation build</span>
+            <span class="timeline-entry-meta">2h &middot; 28,500 tokens</span>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- RIGHT: Heatmap + Stats -->
+      <div>
+        <div class="glass heatmap-container">
+          <div class="tile-header">Activity Heatmap</div>
+          <div id="heatmapGrid" style="margin-bottom:8px;"></div>
+          <div class="heatmap-legend">
+            <span>Less</span>
+            <div class="heatmap-legend-cell heatmap-level-0"></div>
+            <div class="heatmap-legend-cell heatmap-level-1"></div>
+            <div class="heatmap-legend-cell heatmap-level-2"></div>
+            <div class="heatmap-legend-cell heatmap-level-3"></div>
+            <div class="heatmap-legend-cell heatmap-level-4"></div>
+            <span>More</span>
+          </div>
+        </div>
+
+        <div class="glass" style="margin-top:16px;">
+          <div class="activity-stats-title">This Week</div>
+          <div class="activity-stat-row">
+            <span>Sessions</span>
+            <span class="activity-stat-value">14</span>
+          </div>
+          <div class="activity-stat-row">
+            <span>Commits</span>
+            <span class="activity-stat-value">23</span>
+          </div>
+          <div class="activity-stat-row">
+            <span>Tokens</span>
+            <span class="activity-stat-value">186,400</span>
+          </div>
+          <div class="activity-stat-row">
+            <span>Estimated Cost</span>
+            <span class="activity-stat-value" style="color:var(--green)">$6.28</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== -->
+  <!-- TAB: AUDIT                     -->
+  <!-- ============================== -->
+  <div id="tab-audit" style="display:none">
+
+    <!-- Health Score -->
+    <div class="glass audit-health-score">
+      <div class="health-gauge">
+        <svg width="140" height="140" viewBox="0 0 140 140">
+          <circle class="health-gauge-bg" cx="70" cy="70" r="60"></circle>
+          <circle class="health-gauge-fill" cx="70" cy="70" r="60"
+            stroke="var(--green)"
+            stroke-dasharray="377"
+            stroke-dashoffset="105.56"></circle>
+        </svg>
+        <div class="health-gauge-value" style="color:var(--green)">72%</div>
+      </div>
+      <div class="health-gauge-label">Portfolio Health Score</div>
+      <div class="health-gauge-subtitle">Based on documentation completeness, data dictionary coverage, and project freshness</div>
+    </div>
+
+    <!-- Audit Grid: 2x2 -->
+    <div class="audit-grid" id="auditGrid">
+
+      <!-- Tile 1: Data Dictionary Coverage -->
+      <div class="glass audit-tile">
+        <div class="audit-tile-header">
+          <span class="audit-tile-title">Data Dictionary Coverage</span>
+          <span class="audit-tile-score" style="color:var(--amber)">7/16 projects (43%)</span>
+        </div>
+        <div class="audit-progress-bar">
+          <div class="audit-progress-fill" style="width:43%;background:var(--amber)"></div>
+        </div>
+        <table class="audit-table">
+          <thead>
+            <tr><th>Project</th><th>Has Dict</th><th>Last Updated</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Command Centre</td><td style="color:var(--green)">&#10003;</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px">2026-04-16</td><td><span class="audit-pill audit-pill-current">Current</span></td></tr>
+            <tr><td>family-hub</td><td style="color:var(--green)">&#10003;</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px">2026-04-10</td><td><span class="audit-pill audit-pill-current">Current</span></td></tr>
+            <tr><td>Holiday System</td><td style="color:var(--green)">&#10003;</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px">2026-03-15</td><td><span class="audit-pill audit-pill-stale">Stale</span></td></tr>
+            <tr><td>Thingsboard</td><td style="color:var(--green)">&#10003;</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px">2026-04-14</td><td><span class="audit-pill audit-pill-current">Current</span></td></tr>
+            <tr><td>CIR</td><td style="color:var(--green)">&#10003;</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px">2026-04-14</td><td><span class="audit-pill audit-pill-current">Current</span></td></tr>
+            <tr><td>Figma Integration</td><td style="color:var(--green)">&#10003;</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px">2026-03-01</td><td><span class="audit-pill audit-pill-stale">Stale</span></td></tr>
+            <tr><td>outlook-mcp</td><td style="color:var(--green)">&#10003;</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px">2026-04-09</td><td><span class="audit-pill audit-pill-current">Current</span></td></tr>
+            <tr><td>ITSM</td><td style="color:var(--rose)">&#10007;</td><td style="color:var(--text-muted)">&mdash;</td><td><span class="audit-pill audit-pill-missing">Missing</span></td></tr>
+            <tr><td>IOT Admin</td><td style="color:var(--rose)">&#10007;</td><td style="color:var(--text-muted)">&mdash;</td><td><span class="audit-pill audit-pill-missing">Missing</span></td></tr>
+            <tr><td>HR System</td><td style="color:var(--rose)">&#10007;</td><td style="color:var(--text-muted)">&mdash;</td><td><span class="audit-pill audit-pill-missing">Missing</span></td></tr>
+            <tr><td>Sickness System</td><td style="color:var(--rose)">&#10007;</td><td style="color:var(--text-muted)">&mdash;</td><td><span class="audit-pill audit-pill-missing">Missing</span></td></tr>
+            <tr><td>Happy Coder</td><td style="color:var(--rose)">&#10007;</td><td style="color:var(--text-muted)">&mdash;</td><td><span class="audit-pill audit-pill-missing">Missing</span></td></tr>
+            <tr><td>Kia Complaint</td><td style="color:var(--rose)">&#10007;</td><td style="color:var(--text-muted)">&mdash;</td><td><span class="audit-pill audit-pill-missing">Missing</span></td></tr>
+            <tr><td>claude-workspace</td><td style="color:var(--rose)">&#10007;</td><td style="color:var(--text-muted)">&mdash;</td><td><span class="audit-pill audit-pill-missing">Missing</span></td></tr>
+            <tr><td>Jira Integration</td><td style="color:var(--rose)">&#10007;</td><td style="color:var(--text-muted)">&mdash;</td><td><span class="audit-pill audit-pill-missing">Missing</span></td></tr>
+            <tr><td>FM System</td><td style="color:var(--rose)">&#10007;</td><td style="color:var(--text-muted)">&mdash;</td><td><span class="audit-pill audit-pill-missing">Missing</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Tile 2: PROJECT_STATUS.md Freshness -->
+      <div class="glass audit-tile">
+        <div class="audit-tile-header">
+          <span class="audit-tile-title">PROJECT_STATUS.md Freshness</span>
+          <span class="audit-tile-score" style="color:var(--text-secondary)">12/16 have status files</span>
+        </div>
+        <div class="freshness-counts">
+          <div class="freshness-count">
+            <span class="freshness-count-value" style="color:var(--green)">6</span>
+            <span class="freshness-count-label">Fresh &lt;7d</span>
+          </div>
+          <div class="freshness-count">
+            <span class="freshness-count-value" style="color:var(--amber)">3</span>
+            <span class="freshness-count-label">Stale 7-30d</span>
+          </div>
+          <div class="freshness-count">
+            <span class="freshness-count-value" style="color:var(--rose)">3</span>
+            <span class="freshness-count-label">Very Stale &gt;30d</span>
+          </div>
+          <div class="freshness-count">
+            <span class="freshness-count-value" style="color:var(--text-muted)">4</span>
+            <span class="freshness-count-label">Missing</span>
+          </div>
+        </div>
+        <table class="audit-table">
+          <thead>
+            <tr><th>Project</th><th>Last Updated</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Command Centre</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px">2026-04-17</td><td><span class="audit-pill audit-pill-fresh">Fresh</span></td></tr>
+            <tr><td>claude-workspace</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px">2026-04-17</td><td><span class="audit-pill audit-pill-fresh">Fresh</span></td></tr>
+            <tr><td>family-hub</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px">2026-04-16</td><td><span class="audit-pill audit-pill-fresh">Fresh</span></td></tr>
+            <tr><td>Happy Coder</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px">2026-04-16</td><td><span class="audit-pill audit-pill-fresh">Fresh</span></td></tr>
+            <tr><td>outlook-mcp</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px">2026-04-15</td><td><span class="audit-pill audit-pill-fresh">Fresh</span></td></tr>
+            <tr><td>Thingsboard</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px">2026-04-14</td><td><span class="audit-pill audit-pill-fresh">Fresh</span></td></tr>
+            <tr><td>ITSM</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px">2026-04-12</td><td><span class="audit-pill audit-pill-stale">Stale</span></td></tr>
+            <tr><td>Kia Complaint</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px">2026-04-10</td><td><span class="audit-pill audit-pill-stale">Stale</span></td></tr>
+            <tr><td>CIR</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px">2026-04-08</td><td><span class="audit-pill audit-pill-stale">Stale</span></td></tr>
+            <tr><td>Sickness System</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px">2026-03-20</td><td><span class="audit-pill audit-pill-verystale">Very Stale</span></td></tr>
+            <tr><td>IOT Admin</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px">2026-03-10</td><td><span class="audit-pill audit-pill-verystale">Very Stale</span></td></tr>
+            <tr><td>Figma Integration</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px">2026-03-02</td><td><span class="audit-pill audit-pill-verystale">Very Stale</span></td></tr>
+            <tr><td>HR System</td><td style="color:var(--text-muted)">&mdash;</td><td><span class="audit-pill audit-pill-missing">Missing</span></td></tr>
+            <tr><td>Jira Integration</td><td style="color:var(--text-muted)">&mdash;</td><td><span class="audit-pill audit-pill-missing">Missing</span></td></tr>
+            <tr><td>FM System</td><td style="color:var(--text-muted)">&mdash;</td><td><span class="audit-pill audit-pill-missing">Missing</span></td></tr>
+            <tr><td>Zendesk Integration</td><td style="color:var(--text-muted)">&mdash;</td><td><span class="audit-pill audit-pill-missing">Missing</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Tile 3: Feature List Coverage -->
+      <div class="glass audit-tile">
+        <div class="audit-tile-header">
+          <span class="audit-tile-title">Feature List Coverage</span>
+          <span class="audit-tile-score" style="color:var(--text-secondary)">5/16 have feature lists</span>
+        </div>
+        <div style="margin-bottom:16px;">
+          <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Total: <span style="color:var(--text-primary);font-weight:600">47/88</span> features complete (<span style="color:var(--amber);font-weight:600">53%</span>)</div>
+          <div class="audit-progress-bar" style="margin-bottom:20px">
+            <div class="audit-progress-fill" style="width:53%;background:var(--amber)"></div>
+          </div>
+
+          <div class="audit-feature-row">
+            <span class="audit-feature-name">Command Centre</span>
+            <div class="audit-feature-bar"><div class="audit-feature-fill" style="width:94%;background:var(--green)"></div></div>
+            <span class="audit-feature-pct" style="color:var(--green)">94%</span>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;padding-left:168px">31/33 features</div>
+
+          <div class="audit-feature-row">
+            <span class="audit-feature-name">ITSM</span>
+            <div class="audit-feature-bar"><div class="audit-feature-fill" style="width:40%;background:var(--amber)"></div></div>
+            <span class="audit-feature-pct" style="color:var(--amber)">40%</span>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;padding-left:168px">8/20 features</div>
+
+          <div class="audit-feature-row">
+            <span class="audit-feature-name">Figma Integration</span>
+            <div class="audit-feature-bar"><div class="audit-feature-fill" style="width:38%;background:var(--amber)"></div></div>
+            <span class="audit-feature-pct" style="color:var(--amber)">38%</span>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;padding-left:168px">3/8 features</div>
+
+          <div class="audit-feature-row">
+            <span class="audit-feature-name">Thingsboard Integration</span>
+            <div class="audit-feature-bar"><div class="audit-feature-fill" style="width:33%;background:var(--amber)"></div></div>
+            <span class="audit-feature-pct" style="color:var(--amber)">33%</span>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;padding-left:168px">5/15 features</div>
+
+          <div class="audit-feature-row">
+            <span class="audit-feature-name">IOT Admin</span>
+            <div class="audit-feature-bar"><div class="audit-feature-fill" style="width:0%;background:var(--rose)"></div></div>
+            <span class="audit-feature-pct" style="color:var(--rose)">0%</span>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:0;padding-left:168px">0/12 features</div>
+        </div>
+      </div>
+
+      <!-- Tile 4: Risk Exposure Summary -->
+      <div class="glass audit-tile">
+        <div class="audit-tile-header">
+          <span class="audit-tile-title">Risk Exposure Summary</span>
+          <span class="audit-tile-score" style="color:var(--rose)">5 open risks across 4 projects</span>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px">By severity:</div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+            <span style="font-size:13px"><span class="severity-pill severity-high" style="display:inline;padding:2px 6px;font-size:11px">Critical</span> <strong style="color:var(--text-primary)">0</strong></span>
+            <span style="font-size:13px"><span class="severity-pill severity-high" style="display:inline;padding:2px 6px;font-size:11px">High</span> <strong style="color:var(--text-primary)">2</strong></span>
+            <span style="font-size:13px"><span class="severity-pill severity-medium" style="display:inline;padding:2px 6px;font-size:11px">Medium</span> <strong style="color:var(--text-primary)">2</strong></span>
+            <span style="font-size:13px"><span class="severity-pill severity-low" style="display:inline;padding:2px 6px;font-size:11px">Low</span> <strong style="color:var(--text-primary)">1</strong></span>
+          </div>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px">By perspective:</div>
+          <div class="audit-risk-bars">
+            <div class="audit-risk-bar-row">
+              <span class="audit-risk-bar-label"><span class="perspective-dot perspective-security"></span> Security</span>
+              <div class="audit-risk-bar"><div class="audit-risk-bar-fill" style="width:40%;background:var(--rose)"></div></div>
+              <span class="audit-risk-bar-count">2</span>
+            </div>
+            <div class="audit-risk-bar-row">
+              <span class="audit-risk-bar-label"><span class="perspective-dot perspective-technical"></span> Technical</span>
+              <div class="audit-risk-bar"><div class="audit-risk-bar-fill" style="width:40%;background:var(--text-muted)"></div></div>
+              <span class="audit-risk-bar-count">2</span>
+            </div>
+            <div class="audit-risk-bar-row">
+              <span class="audit-risk-bar-label"><span class="perspective-dot perspective-compliance"></span> Compliance</span>
+              <div class="audit-risk-bar"><div class="audit-risk-bar-fill" style="width:20%;background:var(--amber)"></div></div>
+              <span class="audit-risk-bar-count">1</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-bottom:12px">
+          <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px">Projects with most open risks:</div>
+          <table class="audit-table">
+            <thead><tr><th>Project</th><th>Open Risks</th></tr></thead>
+            <tbody>
+              <tr><td>Command Centre</td><td style="font-weight:600;color:var(--rose)">2</td></tr>
+              <tr><td>Holiday System</td><td style="font-weight:600;color:var(--rose)">1</td></tr>
+              <tr><td>outlook-mcp</td><td style="font-weight:600;color:var(--rose)">1</td></tr>
+              <tr><td>Thingsboard</td><td style="font-weight:600;color:var(--rose)">1</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <span class="audit-link" onclick="document.querySelector('[data-tab=risks]').click()">View full risk register &rarr;</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Detail Panel -->
+<div class="detail-overlay" id="detailOverlay"></div>
+<div class="detail-panel" id="detailPanel">
+  <button class="detail-close" id="detailClose">&times;</button>
+  <div id="detailContent"></div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+/* ========================================
+   DATA
+   ======================================== */
+const TODAY = new Date('2026-04-18');
+
+const projects = [
+  { name: 'Command Centre', status: 'Active', scope: 'Work', lastActive: '2026-04-17', features: [31,33], context: 'Web dashboard for monitoring Claude Code sessions', risks: 1, dict: true, dictDate: '2026-04-16' },
+  { name: 'family-hub', status: 'Active Phase 2', scope: 'Personal', lastActive: '2026-04-16', features: null, context: 'Family management app (React + FastAPI on Pi)', risks: 0, dict: true, dictDate: '2026-04-10' },
+  { name: 'claude-workspace', status: 'Infrastructure', scope: 'Personal', lastActive: '2026-04-17', features: null, context: 'Claude Code launcher and config management', risks: 0, dict: false },
+  { name: 'Happy Coder', status: 'Active', scope: 'Personal', lastActive: '2026-04-16', features: null, context: 'Mobile coding companion app', risks: 0, dict: false },
+  { name: 'outlook-mcp', status: 'Active', scope: 'Personal', lastActive: '2026-04-15', features: null, context: 'Outlook MCP server for email and calendar', risks: 0, dict: false },
+  { name: 'Thingsboard Integration', status: 'Active', scope: 'Work', lastActive: '2026-04-14', features: [5,15], context: 'IoT device management integration', risks: 0, dict: true, dictDate: '2026-04-14' },
+  { name: 'ITSM', status: 'Active', scope: 'Work', lastActive: '2026-04-12', features: [8,20], context: 'IT Service Management system', risks: 0, dict: false },
+  { name: 'Kia Complaint', status: 'Active case', scope: 'Personal', lastActive: '2026-04-10', features: null, context: 'Consumer complaint case management', risks: 0, dict: false },
+  { name: 'Sickness System', status: 'Requirements', scope: 'Work', lastActive: '2026-03-20', features: null, context: 'Employee sickness tracking and reporting', risks: 0, dict: false },
+  { name: 'Jira Integration', status: 'Active', scope: 'Personal', lastActive: '2026-04-08', features: null, context: 'Jira API integration for task sync', risks: 0, dict: false },
+];
+
+const staleProjects = [
+  { name: 'IOT Admin', status: 'Active', scope: 'Work', lastActive: '2026-03-10', features: [0,12], dict: false },
+  { name: 'Figma Integration', status: 'Active', scope: 'Work', lastActive: '2026-03-02', features: [3,8], dict: true, dictDate: '2026-03-01' },
+  { name: 'HR System', status: 'RFP Phase', scope: 'Work', lastActive: '2026-02-28', features: null, dict: false },
+];
+
+const gateProjects = [
+  { name: 'Holiday System', scope: 'Work', lastActive: '2026-04-15', gate: 'Design Gate', dict: true, dictDate: '2026-03-15' },
+  { name: 'Zendesk Integration', scope: 'Work', lastActive: '2026-04-17', gate: 'Pre-deploy', dict: true },
+];
+
+const archivedProjects = [
+  { name: 'FM System', scope: 'Work', lastActive: '2025-11-10' },
+  { name: 'FSM Comparison', scope: 'Work', lastActive: '2025-10-05' },
+  { name: 'Recruitment', scope: 'Work', lastActive: '2025-09-20' },
+  { name: 'Data Team New Demand', scope: 'Work', lastActive: '2025-08-15' },
+  { name: 'Data Team Work Log', scope: 'Work', lastActive: '2025-07-30' },
+  { name: 'AI Workflow', scope: 'Work', lastActive: '2025-06-12' },
+];
+
+const detailData = {
+  'Command Centre': {
+    context: 'Web dashboard for monitoring Claude Code sessions, permissions, and project health across the entire portfolio.',
+    features: [
+      { done: true, text: 'Session dashboard with real-time status' },
+      { done: true, text: 'Desktop toast notifications (PowerShell)' },
+      { done: true, text: 'Auto-approve permissions with toggles' },
+      { done: false, text: 'Mobile push notifications' },
+      { done: false, text: 'Accurate token usage from CLI' },
+    ],
+    featureCount: [31, 33],
+    commits: [
+      { hash: 'cadcde4', msg: 'v0.2.0: Auto-approve, persistence, watchdog', date: '2026-04-17' },
+      { hash: 'a9beaf5', msg: 'Update project docs for 2026-04-15 changes', date: '2026-04-15' },
+      { hash: 'c9bc451', msg: 'Fix terminal focus + per-session tokens', date: '2026-04-15' },
+      { hash: 'b5addfc', msg: 'Add README, INSTALL guide, DATA_DICTIONARY', date: '2026-04-14' },
+      { hash: 'cd5e4a9', msg: 'B001-B009: Priority backlog + 33 tests', date: '2026-04-13' },
+    ],
+    sessions: [
+      { date: '2026-04-16-17', text: 'Major session. B010-B017 built. PowerShell toasts, persistence, watchdog.' },
+      { date: '2026-04-15', text: 'Terminal focus fix. Per-session tokens. Spawner path fix.' },
+      { date: '2026-04-13', text: 'Text input (F029). Priority backlog B001-B009. 33 tests.' },
+      { date: '2026-04-12', text: 'Design + MVP build. 17 features. Transcript panel, permissions.' },
+    ],
+    risks: [{ id: 'R001', text: 'No authentication on dashboard -- network access can approve permissions', severity: 'Medium' }],
+  }
+};
+
+/* ========================================
+   UTILITY FUNCTIONS
+   ======================================== */
+function daysBetween(dateStr) {
+  const d = new Date(dateStr);
+  return Math.floor((TODAY - d) / (1000 * 60 * 60 * 24));
+}
+
+function getDecayClass(days) {
+  if (days <= 2) return 'decay-0';
+  if (days <= 7) return 'decay-1';
+  if (days <= 14) return 'decay-2';
+  if (days <= 21) return 'decay-3';
+  if (days <= 30) return 'decay-4';
+  return 'decay-5';
+}
+
+function getDotClass(days) {
+  if (days <= 7) return 'dot-green';
+  if (days <= 21) return 'dot-amber';
+  return 'dot-rose';
+}
+
+function getAgeClass(days) {
+  if (days < 7) return 'age-green';
+  if (days <= 21) return 'age-amber';
+  return 'age-rose';
+}
+
+function getStatusClass(status) {
+  const s = status.toLowerCase();
+  if (s.includes('active') || s.includes('phase')) return 'status-active';
+  if (s.includes('gate') || s.includes('pre-deploy')) return 'status-gate';
+  if (s.includes('rfp') || s.includes('requirement') || s.includes('planning')) return 'status-planning';
+  if (s.includes('infra')) return 'status-infra';
+  if (s.includes('case')) return 'status-active';
+  return 'status-active';
+}
+
+function generateHeatTrail(lastActiveStr, isStale) {
+  const days = daysBetween(lastActiveStr);
+  const cells = [];
+  for (let i = 29; i >= 0; i--) {
+    let active = false;
+    if (isStale) {
+      // Stale: activity only far in the past
+      active = i > (30 - Math.min(days, 30)) && Math.random() > 0.5;
+    } else if (days <= 3) {
+      // Very active
+      active = i < 10 ? Math.random() > 0.2 : Math.random() > 0.6;
+    } else if (days <= 7) {
+      active = i < 7 ? Math.random() > 0.3 : Math.random() > 0.7;
+    } else if (days <= 14) {
+      active = i < 14 ? Math.random() > 0.5 : Math.random() > 0.8;
+    } else {
+      active = Math.random() > 0.75;
+    }
+    cells.push(active);
+  }
+  return cells.map(a => `<div class="heat-cell ${a ? 'heat-active' : 'heat-inactive'}"></div>`).join('');
+}
+
+// Seed random for consistent heat trails
+let seed = 42;
+function seededRandom() {
+  seed = (seed * 16807) % 2147483647;
+  return (seed - 1) / 2147483646;
+}
+
+function generateSeededHeatTrail(lastActiveStr, projectName) {
+  const days = daysBetween(lastActiveStr);
+  seed = projectName.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+  const cells = [];
+  for (let i = 29; i >= 0; i--) {
+    let active = false;
+    const dayAge = i; // 0 = most recent (right), 29 = oldest (left)
+    if (days > 30) {
+      active = dayAge > 25 && seededRandom() > 0.5;
+    } else if (days > 21) {
+      active = dayAge > (30 - days - 5) && dayAge < (30 - days + 5) && seededRandom() > 0.4;
+    } else if (days <= 3) {
+      active = dayAge < 12 ? seededRandom() > 0.2 : seededRandom() > 0.65;
+    } else if (days <= 7) {
+      active = dayAge < 10 ? seededRandom() > 0.3 : seededRandom() > 0.7;
+    } else if (days <= 14) {
+      active = dayAge < 16 ? seededRandom() > 0.45 : seededRandom() > 0.8;
+    } else {
+      active = seededRandom() > 0.65;
+    }
+    cells.push(active);
+  }
+  return cells.map(a => `<div class="heat-cell ${a ? 'heat-active' : 'heat-inactive'}"></div>`).join('');
+}
+
+/* ========================================
+   BUILD PROJECT CARDS (BOARD VIEW)
+   ======================================== */
+function buildProjectCards() {
+  const grid = document.getElementById('projectsGrid');
+  grid.innerHTML = '';
+  projects.forEach(p => {
+    const days = daysBetween(p.lastActive);
+    const card = document.createElement('div');
+    card.className = `glass project-card ${getDecayClass(days)}`;
+    card.dataset.scope = p.scope.toLowerCase();
+    card.dataset.name = p.name;
+    card.onclick = () => openDetail(p.name);
+
+    let featuresHtml = '';
+    if (p.features) {
+      const pct = Math.round((p.features[0] / p.features[1]) * 100);
+      featuresHtml = `
+        <div class="progress-row">
+          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+          <span class="progress-label">${p.features[0]}/${p.features[1]}</span>
+        </div>`;
+    }
+
+    let riskHtml = '';
+    if (p.risks > 0) {
+      riskHtml = `<div class="project-risk-badge"><span class="tile-dot" style="background:var(--rose);width:6px;height:6px"></span> ${p.risks} open risk</div>`;
+    }
+
+    card.innerHTML = `
+      <div class="project-card-top">
+        <span class="project-card-name">${p.name}</span>
+        <span class="status-pill ${getStatusClass(p.status)}">${p.status}</span>
+      </div>
+      <div class="project-card-second">
+        <span class="scope-tag">${p.scope}</span>
+        <span class="staleness-dot ${getDotClass(days)}"></span>
+      </div>
+      <div class="project-context">${p.context}</div>
+      ${riskHtml}
+      ${featuresHtml}
+      <div class="heat-trail">${generateSeededHeatTrail(p.lastActive, p.name)}</div>
+      <div class="project-card-bottom">
+        <span class="last-active">Last active: ${p.lastActive}</span>
+        <button class="btn btn-sm" onclick="event.stopPropagation();showToast('Launching session...')">Launch Session</button>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+/* ========================================
+   BUILD TABLE (LIST VIEW)
+   ======================================== */
+function buildTable() {
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = '';
+
+  // Gate Queue Section
+  addSectionHeader(tbody, 'gate-queue', 'Gate Queue', 'section-gate');
+  gateProjects.forEach(p => {
+    const days = daysBetween(p.lastActive);
+    addTableRow(tbody, {
+      dotClass: getDotClass(days),
+      name: p.name,
+      type: 'Work',
+      lastActive: p.lastActive,
+      age: days,
+      ageClass: getAgeClass(days),
+      gate: p.gate,
+      features: null,
+      risks: 0,
+      dict: p.dict,
+      heatTrail: generateSeededHeatTrail(p.lastActive, p.name),
+      sectionClass: 'section-gate',
+      section: 'gate-queue'
+    });
+  });
+
+  // Work Section
+  const workProjects = [...projects.filter(p => p.scope === 'Work'), ...staleProjects.filter(p => p.scope === 'Work')];
+  workProjects.sort((a, b) => new Date(b.lastActive) - new Date(a.lastActive));
+  addSectionHeader(tbody, 'work', 'Work');
+  workProjects.forEach(p => {
+    const days = daysBetween(p.lastActive);
+    addTableRow(tbody, {
+      dotClass: getDotClass(days),
+      name: p.name,
+      type: 'Work',
+      lastActive: p.lastActive,
+      age: days,
+      ageClass: getAgeClass(days),
+      gate: null,
+      features: p.features,
+      risks: p.risks || 0,
+      dict: p.dict,
+      heatTrail: generateSeededHeatTrail(p.lastActive, p.name),
+      sectionClass: days > 21 ? 'row-stale' : '',
+      section: 'work'
+    });
+  });
+
+  // Personal Section
+  const persProjects = projects.filter(p => p.scope === 'Personal');
+  persProjects.sort((a, b) => new Date(b.lastActive) - new Date(a.lastActive));
+  addSectionHeader(tbody, 'personal', 'Personal');
+  persProjects.forEach(p => {
+    const days = daysBetween(p.lastActive);
+    addTableRow(tbody, {
+      dotClass: getDotClass(days),
+      name: p.name,
+      type: 'Pers',
+      lastActive: p.lastActive,
+      age: days,
+      ageClass: getAgeClass(days),
+      gate: null,
+      features: p.features,
+      risks: p.risks || 0,
+      dict: p.dict,
+      heatTrail: generateSeededHeatTrail(p.lastActive, p.name),
+      sectionClass: '',
+      section: 'personal'
+    });
+  });
+
+  // Archived Section (collapsed by default)
+  addSectionHeader(tbody, 'archived', 'Archived', '', true);
+  archivedProjects.forEach(p => {
+    const days = daysBetween(p.lastActive);
+    addTableRow(tbody, {
+      dotClass: 'dot-grey',
+      name: p.name,
+      type: 'Work',
+      lastActive: p.lastActive,
+      age: days,
+      ageClass: 'age-rose',
+      gate: null,
+      features: null,
+      risks: 0,
+      dict: false,
+      heatTrail: generateSeededHeatTrail(p.lastActive, p.name),
+      sectionClass: 'row-archived',
+      section: 'archived',
+      hidden: true
+    });
+  });
+}
+
+function addSectionHeader(tbody, section, label, extraClass, collapsed) {
+  const tr = document.createElement('tr');
+  tr.className = `table-section-header ${extraClass || ''} ${collapsed ? 'collapsed' : ''}`;
+  tr.dataset.section = section;
+  tr.onclick = () => toggleSection(section, tr);
+  tr.innerHTML = `<td colspan="10"><span class="chevron">&#9660;</span> ${label}</td>`;
+  tbody.appendChild(tr);
+}
+
+function addTableRow(tbody, d) {
+  const tr = document.createElement('tr');
+  tr.className = `${d.sectionClass}`;
+  tr.dataset.section = d.section;
+  tr.dataset.scope = d.type.toLowerCase() === 'pers' ? 'personal' : d.type.toLowerCase();
+  tr.dataset.name = d.name;
+  if (d.hidden) tr.style.display = 'none';
+  tr.onclick = () => openDetail(d.name);
+
+  let featuresHtml = '';
+  if (d.features) {
+    const pct = Math.round((d.features[0] / d.features[1]) * 100);
+    featuresHtml = `<div class="table-features"><div class="table-progress"><div class="table-progress-fill" style="width:${pct}%"></div></div><span>${d.features[0]}/${d.features[1]}</span></div>`;
+  }
+
+  let gateHtml = d.gate ? `<span class="status-pill status-gate">${d.gate}</span>` : '';
+  let risksHtml = d.risks > 0 ? `<span class="table-risk">${d.risks}</span>` : '<span style="color:var(--text-muted)">0</span>';
+  let dictHtml = d.dict ? `<span class="table-dict-yes">&#10003;</span>` : `<span class="table-dict-no">&#10007;</span>`;
+
+  tr.innerHTML = `
+    <td><span class="table-status-dot ${d.dotClass}"></span></td>
+    <td style="font-weight:500">${d.name}</td>
+    <td style="color:var(--text-muted)">${d.type}</td>
+    <td style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-muted)">${d.lastActive}</td>
+    <td class="${d.ageClass}" style="font-family:'JetBrains Mono',monospace;font-size:12px">${d.age}d</td>
+    <td>${gateHtml}</td>
+    <td>${featuresHtml}</td>
+    <td>${risksHtml}</td>
+    <td>${dictHtml}</td>
+    <td><div class="heat-trail">${d.heatTrail}</div></td>
+  `;
+  tbody.appendChild(tr);
+}
+
+function toggleSection(section, headerRow) {
+  const rows = document.querySelectorAll(`#tableBody tr[data-section="${section}"]:not(.table-section-header)`);
+  const isCollapsed = headerRow.classList.toggle('collapsed');
+  rows.forEach(r => r.style.display = isCollapsed ? 'none' : '');
+}
+
+/* ========================================
+   DETAIL PANEL
+   ======================================== */
+function openDetail(name) {
+  const overlay = document.getElementById('detailOverlay');
+  const panel = document.getElementById('detailPanel');
+  const content = document.getElementById('detailContent');
+
+  // Find project data
+  const p = [...projects, ...staleProjects, ...gateProjects].find(x => x.name === name);
+  const detail = detailData[name];
+
+  if (!p) {
+    content.innerHTML = `
+      <div class="detail-name">${name}</div>
+      <div class="detail-context" style="margin-top:16px">Detailed data not available in this prototype.</div>
+      <button class="btn btn-primary btn-full" style="margin-top:24px" onclick="showToast('Launching session...')">Launch Session</button>
+    `;
+  } else {
+    const days = daysBetween(p.lastActive);
+    let html = `
+      <div class="detail-name">${p.name}</div>
+      <div class="detail-meta">
+        <span class="status-pill ${getStatusClass(p.status || 'Active')}">${p.status || 'Active'}</span>
+        <span class="scope-tag">${p.scope}</span>
+        <span class="staleness-dot ${getDotClass(days)}" style="margin-left:4px"></span>
+        <span class="last-active">Last active: ${p.lastActive} (${days}d ago)</span>
+      </div>
+      <div class="detail-context">${p.context || detail?.context || ''}</div>
+    `;
+
+    if (detail) {
+      // Features
+      if (detail.features) {
+        const pct = Math.round((detail.featureCount[0] / detail.featureCount[1]) * 100);
+        html += `
+          <div class="detail-section">
+            <div class="detail-section-title">Features</div>
+            <div class="progress-row" style="margin-bottom:8px">
+              <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+              <span class="progress-label">${detail.featureCount[0]} of ${detail.featureCount[1]} complete</span>
+            </div>
+            ${detail.features.map(f => `
+              <div class="detail-feature">
+                <span class="${f.done ? 'feature-check' : 'feature-cross'}">${f.done ? '&#10003;' : '&#10007;'}</span>
+                ${f.text}
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }
+
+      // Commits
+      if (detail.commits) {
+        html += `
+          <div class="detail-section">
+            <div class="detail-section-title">Recent Commits</div>
+            ${detail.commits.map(c => `
+              <div class="detail-commit">
+                <span class="commit-hash">${c.hash}</span>
+                <span class="commit-msg">${c.msg}</span>
+                <span class="commit-date">${c.date}</span>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }
+
+      // Sessions
+      if (detail.sessions) {
+        html += `
+          <div class="detail-section">
+            <div class="detail-section-title">Session Log</div>
+            ${detail.sessions.map(s => `
+              <div class="detail-session">
+                <div class="session-date">${s.date}</div>
+                ${s.text}
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }
+
+      // Risks
+      if (detail.risks && detail.risks.length > 0) {
+        html += `
+          <div class="detail-section">
+            <div class="detail-section-title">Risks</div>
+            ${detail.risks.map(r => `
+              <div class="risk-item" style="background:rgba(244,63,94,0.05)">
+                <div class="risk-row">
+                  <span class="risk-id">${r.id}</span>
+                  <span class="severity-pill severity-${r.severity.toLowerCase()}">${r.severity}</span>
+                </div>
+                <div class="risk-desc">${r.text}</div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }
+    }
+
+    html += `<button class="btn btn-primary btn-full" style="margin-top:24px" onclick="showToast('Launching session for ${p.name}...')">Launch Session</button>`;
+    content.innerHTML = html;
+  }
+
+  overlay.classList.add('active');
+  panel.classList.add('active');
+}
+
+function closeDetail() {
+  document.getElementById('detailOverlay').classList.remove('active');
+  document.getElementById('detailPanel').classList.remove('active');
+}
+
+document.getElementById('detailClose').onclick = closeDetail;
+document.getElementById('detailOverlay').onclick = closeDetail;
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetail(); });
+
+/* ========================================
+   TOAST NOTIFICATIONS
+   ======================================== */
+function showToast(msg) {
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = msg;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+/* ========================================
+   TAB NAVIGATION
+   ======================================== */
+document.querySelectorAll('.nav-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const tabName = tab.dataset.tab;
+    document.querySelectorAll('[id^="tab-"]').forEach(el => el.style.display = 'none');
+    document.getElementById(`tab-${tabName}`).style.display = 'block';
+    // Switch filter row content
+    document.querySelectorAll('.tab-filters').forEach(f => f.style.display = 'none');
+    const filters = document.getElementById(`filters-${tabName}`);
+    if (filters) filters.style.display = '';
+  });
+});
+
+/* ========================================
+   VIEW TOGGLE (Board / List)
+   ======================================== */
+document.querySelectorAll('.btn-toggle').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.btn-toggle').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const view = btn.dataset.view;
+    if (view === 'board') {
+      document.getElementById('boardView').classList.add('active');
+      document.getElementById('boardView').style.display = 'block';
+      document.getElementById('listView').classList.remove('active');
+      document.getElementById('listView').style.display = 'none';
+    } else {
+      document.getElementById('boardView').classList.remove('active');
+      document.getElementById('boardView').style.display = 'none';
+      document.getElementById('listView').classList.add('active');
+      document.getElementById('listView').style.display = 'block';
+    }
+  });
+});
+
+/* ========================================
+   FILTER PILLS
+   ======================================== */
+document.querySelectorAll('.pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    const filter = pill.dataset.filter;
+    applyFilter(filter);
+  });
+});
+
+function applyFilter(filter) {
+  // Board view cards
+  document.querySelectorAll('.project-card').forEach(card => {
+    const scope = card.dataset.scope;
+    if (filter === 'all') {
+      card.style.display = '';
+    } else if (filter === 'work') {
+      card.style.display = scope === 'work' ? '' : 'none';
+    } else if (filter === 'personal') {
+      card.style.display = scope === 'personal' ? '' : 'none';
+    } else if (filter === 'stale') {
+      const name = card.dataset.name;
+      const p = projects.find(x => x.name === name);
+      const days = p ? daysBetween(p.lastActive) : 0;
+      card.style.display = days > 21 ? '' : 'none';
+    } else if (filter === 'gate') {
+      card.style.display = 'none'; // Gate projects are in the gate tile, not cards
+    }
+  });
+
+  // List view rows
+  document.querySelectorAll('#tableBody tr:not(.table-section-header)').forEach(row => {
+    if (row.style.display === 'none' && row.dataset.section === 'archived') return; // Keep archived hidden if collapsed
+    const scope = row.dataset.scope;
+    if (filter === 'all') {
+      // Don't show archived rows if section is collapsed
+      const header = document.querySelector(`.table-section-header[data-section="${row.dataset.section}"]`);
+      if (header && header.classList.contains('collapsed')) {
+        row.style.display = 'none';
+      } else {
+        row.style.display = '';
+      }
+    } else if (filter === 'work') {
+      row.style.display = scope === 'work' ? '' : 'none';
+    } else if (filter === 'personal') {
+      row.style.display = scope === 'personal' ? '' : 'none';
+    } else if (filter === 'stale') {
+      // Show only stale rows
+      row.style.display = row.classList.contains('row-stale') ? '' : 'none';
+    } else if (filter === 'gate') {
+      row.style.display = row.dataset.section === 'gate-queue' ? '' : 'none';
+    }
+  });
+
+  // Show/hide section headers based on filter
+  document.querySelectorAll('.table-section-header').forEach(header => {
+    if (filter === 'all') {
+      header.style.display = '';
+    } else if (filter === 'gate') {
+      header.style.display = header.dataset.section === 'gate-queue' ? '' : 'none';
+    } else if (filter === 'work') {
+      header.style.display = (header.dataset.section === 'work' || header.dataset.section === 'gate-queue') ? '' : 'none';
+    } else if (filter === 'personal') {
+      header.style.display = header.dataset.section === 'personal' ? '' : 'none';
+    } else {
+      header.style.display = 'none';
+    }
+  });
+}
+
+/* ========================================
+   AUTO-APPROVE TOGGLE
+   ======================================== */
+document.getElementById('autoApproveBtn').addEventListener('click', function() {
+  this.classList.toggle('btn-primary');
+  if (this.classList.contains('btn-primary')) {
+    showToast('Auto-approve enabled');
+  } else {
+    showToast('Auto-approve disabled');
+  }
+});
+
+/* ========================================
+   POPULATE HEAT TRAILS IN STALE TILES
+   ======================================== */
+function populateStaleHeatTrails() {
+  document.querySelectorAll('.stale-item .heat-trail').forEach((el, i) => {
+    const staleP = staleProjects[i];
+    if (staleP) {
+      el.innerHTML = generateSeededHeatTrail(staleP.lastActive, staleP.name);
+    }
+  });
+}
+
+/* ========================================
+   SESSIONS TAB
+   ======================================== */
+const sessionTranscripts = [
+  // Session 0: Command Centre
+  [
+    { role: 'user', text: 'Add the portfolio scanner service' },
+    { role: 'assistant', text: "I'll create the portfolio scanner. Let me start by reading the existing architecture..." },
+    { role: 'tool', text: 'Read ARCHITECTURE.md' },
+    { role: 'assistant', text: 'Now I\'ll create the scanner service. The architecture uses a modular pattern with services registered in the main index. I\'ll create <code>src/services/portfolio-scanner.ts</code> with the following approach:\n\n1. Scan all project directories for PROJECT_STATUS.md\n2. Parse status, last active date, and features\n3. Aggregate into a portfolio health summary\n4. Emit events for the dashboard to consume' },
+  ],
+  // Session 1: outlook-mcp
+  [
+    { role: 'user', text: 'Fix the OAuth refresh token flow — it expires after 90 days and silently fails' },
+    { role: 'assistant', text: 'Let me examine the current token refresh implementation to understand the failure mode...' },
+    { role: 'tool', text: 'Read src/auth/token-manager.ts' },
+    { role: 'assistant', text: 'Found the issue. The refresh token handler doesn\'t check for the `invalid_grant` error that Microsoft returns when a refresh token expires. I need to add a re-authentication fallback.' },
+  ],
+  // Session 2: family-hub
+  [
+    { role: 'user', text: 'Build the meal planning calendar view for Phase 2' },
+    { role: 'assistant', text: 'I\'ll create the meal planning calendar component. Let me check the existing Phase 2 design spec...' },
+    { role: 'tool', text: 'Read docs/phase-2-design.md' },
+    { role: 'assistant', text: 'Creating the MealCalendar component with weekly view, drag-and-drop meal assignment, and recipe search integration.' },
+  ],
+  // Session 3: ITSM
+  [
+    { role: 'user', text: 'Add form validation for the ticket submission form' },
+    { role: 'assistant', text: 'I\'ll add comprehensive validation. Let me review the current form fields and requirements...' },
+    { role: 'tool', text: 'Read src/Components/TicketForm.razor' },
+    { role: 'assistant', text: 'Validation complete. Added required field checks, email format validation, priority auto-assignment based on category, and inline error messages. All 8 validation rules pass.' },
+  ],
+];
+
+const sessionNames = [
+  'Command Centre',
+  'outlook-mcp',
+  'family-hub',
+  'ITSM',
+];
+
+function selectSession(idx, el) {
+  document.querySelectorAll('.session-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  const panel = document.getElementById('transcriptPanel');
+  const titleEl = panel.querySelector('.tile-header');
+  titleEl.textContent = 'Transcript \u2014 ' + sessionNames[idx];
+  const contentEl = document.getElementById('transcriptContent');
+  const transcript = sessionTranscripts[idx];
+  let html = '';
+  transcript.forEach(msg => {
+    if (msg.role === 'tool') {
+      html += `<div class="transcript-msg"><div class="transcript-role transcript-role-tool">Tool Use</div><div class="transcript-tool-block">${msg.text}</div></div>`;
+    } else {
+      const roleClass = msg.role === 'user' ? 'transcript-role-user' : 'transcript-role-assistant';
+      const roleLabel = msg.role === 'user' ? 'User' : 'Assistant';
+      html += `<div class="transcript-msg"><div class="transcript-role ${roleClass}">${roleLabel}</div><div class="transcript-text">${msg.text}</div></div>`;
+    }
+  });
+  // Only show thinking indicator for active sessions (0, 2)
+  if (idx === 0 || idx === 2) {
+    html += '<div class="thinking-indicator"><div class="thinking-dots"><span></span><span></span><span></span></div><span>Working...</span></div>';
+  }
+  contentEl.innerHTML = html;
+}
+
+// Global permission bar — visible on ALL tabs
+let permTimerVal = 28;
+let permTimerInterval = setInterval(tickPermission, 1000);
+
+function tickPermission() {
+  permTimerVal--;
+  const el = document.getElementById('permissionTimer');
+  if (el) el.textContent = permTimerVal + 's';
+  if (permTimerVal <= 0) {
+    clearInterval(permTimerInterval);
+    hidePermissionBar();
+    showToast('Permission timed out — fell through to CLI');
+  }
+}
+
+function approvePermission() {
+  clearInterval(permTimerInterval);
+  hidePermissionBar();
+  showToast('Permission approved: Bash (npm install express)');
+}
+
+function denyPermission() {
+  clearInterval(permTimerInterval);
+  hidePermissionBar();
+  showToast('Permission denied: Bash (npm install express)');
+}
+
+function hidePermissionBar() {
+  const bar = document.getElementById('globalPermissionBar');
+  if (bar) {
+    bar.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+    bar.style.opacity = '0';
+    bar.style.transform = 'translateY(-10px)';
+    setTimeout(() => { bar.style.display = 'none'; }, 200);
+  }
+  const badge = document.getElementById('sessionsBadge');
+  if (badge) badge.style.display = 'none';
+}
+
+/* ========================================
+   RISKS TAB
+   ======================================== */
+const risksData = [
+  { id: 'R001', date: '2026-04-12', project: 'Command Centre', perspective: 'security', severity: 'medium', status: 'open',
+    desc: 'No authentication on dashboard \u2014 anyone on the local network or Tailscale tailnet can approve/deny permissions and control sessions',
+    detail: '' },
+  { id: 'R002', date: '2026-04-15', project: 'Holiday System', perspective: 'compliance', severity: 'high', status: 'open',
+    desc: 'Employee personal data (leave dates, sickness records) handling has not been reviewed against GDPR data protection requirements',
+    detail: '' },
+  { id: 'R003', date: '2026-04-10', project: 'outlook-mcp', perspective: 'security', severity: 'high', status: 'open',
+    desc: 'OAuth refresh tokens stored in plaintext .env file with no encryption at rest',
+    detail: '' },
+  { id: 'R004', date: '2026-04-16', project: 'Command Centre', perspective: 'technical', severity: 'medium', status: 'open',
+    desc: 'Session persistence uses JSON file on disk \u2014 no backup, no corruption recovery, no concurrent write protection',
+    detail: '' },
+  { id: 'R005', date: '2026-04-14', project: 'Thingsboard Integration', perspective: 'technical', severity: 'low', status: 'open',
+    desc: "Spencer's IoT credentials not verified \u2014 access scope may be insufficient for production API calls",
+    detail: '' },
+  { id: 'R006', date: '2026-03-20', project: 'family-hub', perspective: 'technical', severity: 'low', status: 'accepted',
+    desc: 'SQLite database on Pi with no automated backup \u2014 acceptable for personal family data, manual backup monthly',
+    detail: 'Accepted by: James, 2026-03-22' },
+  { id: 'R007', date: '2026-04-01', project: 'CIR', perspective: 'transition', severity: 'medium', status: 'accepted',
+    desc: 'Single point of knowledge \u2014 only James understands the full integration map',
+    detail: 'Accepted by: James, 2026-04-05' },
+  { id: 'R008', date: '2026-04-11', project: 'Command Centre', perspective: 'technical', severity: 'high', status: 'mitigated',
+    desc: 'Hook settings overwritten by launcher sync',
+    detail: 'Mitigated: Added hooks to cloud template, 2026-04-13' },
+  { id: 'R009', date: '2026-03-15', project: 'family-hub', perspective: 'security', severity: 'medium', status: 'mitigated',
+    desc: 'JWT secret hardcoded in source',
+    detail: 'Mitigated: Moved to .env, added to .gitignore, 2026-03-16' },
+  { id: 'R010', date: '2026-04-08', project: 'outlook-mcp', perspective: 'compliance', severity: 'medium', status: 'mitigated',
+    desc: 'Email access scope too broad',
+    detail: 'Mitigated: Reduced to Mail.Read + Calendars.ReadWrite, 2026-04-09' },
+];
+
+function buildRisksTable() {
+  const tbody = document.getElementById('risksTableBody');
+  tbody.innerHTML = '';
+  risksData.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    tr.dataset.perspective = r.perspective;
+    tr.dataset.severity = r.severity;
+    tr.dataset.status = r.status;
+    tr.dataset.project = r.project;
+    tr.onclick = () => toggleRiskDetail(i);
+
+    const sevClass = r.severity === 'critical' ? 'severity-critical' :
+                     r.severity === 'high' ? 'severity-high' :
+                     r.severity === 'medium' ? 'severity-medium' : 'severity-low';
+    const statusClass = 'risk-status-' + r.status;
+    const perspClass = 'perspective-' + r.perspective;
+
+    let actionsHtml = '';
+    if (r.status === 'open') {
+      actionsHtml = `<button class="btn-risk-action" onclick="event.stopPropagation();showToast('Risk ${r.id} accepted')">Accept</button><button class="btn-risk-action" onclick="event.stopPropagation();showToast('Risk ${r.id} mitigation started')">Mitigate</button>`;
+    }
+
+    tr.innerHTML = `
+      <td style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-muted)">${r.id}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-muted);white-space:nowrap">${r.date}</td>
+      <td style="font-weight:500">${r.project}</td>
+      <td><span class="perspective-dot ${perspClass}"></span><span style="font-size:12px;color:var(--text-secondary)">${r.perspective.charAt(0).toUpperCase() + r.perspective.slice(1)}</span></td>
+      <td><span class="${sevClass}">${r.severity.charAt(0).toUpperCase() + r.severity.slice(1)}</span></td>
+      <td><span class="${statusClass}">${r.status.charAt(0).toUpperCase() + r.status.slice(1)}</span></td>
+      <td style="max-width:320px;font-size:12px;color:var(--text-secondary);line-height:1.4">${r.desc}</td>
+      <td style="white-space:nowrap">${actionsHtml}</td>
+    `;
+    tbody.appendChild(tr);
+
+    // Detail row (hidden)
+    if (r.detail) {
+      const detailTr = document.createElement('tr');
+      detailTr.className = 'risk-expanded-detail';
+      detailTr.id = 'risk-detail-' + i;
+      detailTr.innerHTML = `<td colspan="8" style="padding:12px 16px;font-size:12px;color:var(--text-secondary);background:rgba(255,255,255,0.02)">${r.detail}</td>`;
+      tbody.appendChild(detailTr);
+    }
+  });
+}
+
+function toggleRiskDetail(idx) {
+  const el = document.getElementById('risk-detail-' + idx);
+  if (el) {
+    el.classList.toggle('show');
+    el.style.display = el.classList.contains('show') ? 'table-row' : 'none';
+  }
+}
+
+function toggleRiskFilter(pill, group) {
+  document.querySelectorAll(`[data-rfilter="${group}"]`).forEach(p => p.classList.remove('active'));
+  pill.classList.add('active');
+  filterRisks();
+}
+
+function filterRisks() {
+  const perspActive = document.querySelector('[data-rfilter="perspective"].active');
+  const sevActive = document.querySelector('[data-rfilter="severity"].active');
+  const statActive = document.querySelector('[data-rfilter="status"].active');
+  const projSelect = document.querySelector('.risk-select');
+
+  const persp = perspActive ? perspActive.dataset.val : 'all';
+  const sev = sevActive ? sevActive.dataset.val : 'all';
+  const stat = statActive ? statActive.dataset.val : 'all';
+  const proj = projSelect ? projSelect.value : 'All Projects';
+
+  const rows = document.querySelectorAll('#risksTableBody tr:not(.risk-expanded-detail)');
+  rows.forEach(row => {
+    let show = true;
+    if (persp !== 'all' && row.dataset.perspective !== persp) show = false;
+    if (sev !== 'all' && row.dataset.severity !== sev) show = false;
+    if (stat !== 'all' && row.dataset.status !== stat) show = false;
+    if (proj !== 'All Projects' && row.dataset.project !== proj) show = false;
+    row.style.display = show ? '' : 'none';
+  });
+
+  // Hide detail rows for hidden risks
+  document.querySelectorAll('.risk-expanded-detail').forEach(el => {
+    el.style.display = 'none';
+    el.classList.remove('show');
+  });
+}
+
+/* ========================================
+   ACTIVITY TAB — HEATMAP
+   ======================================== */
+function buildHeatmap() {
+  const container = document.getElementById('heatmapGrid');
+  if (!container) return;
+
+  // Generate 12 weeks of data (84 days)
+  const weeks = 12;
+  const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  // Mock activity data seeded
+  seed = 1234;
+  const activityData = [];
+  for (let w = 0; w < weeks; w++) {
+    const weekData = [];
+    for (let d = 0; d < 7; d++) {
+      const dayIdx = w * 7 + d;
+      let level = 0;
+      if (dayIdx > 70) { // Recent days — more active
+        level = seededRandom() > 0.2 ? (seededRandom() > 0.5 ? (seededRandom() > 0.6 ? 4 : 3) : 2) : (seededRandom() > 0.5 ? 1 : 0);
+      } else if (dayIdx > 50) {
+        level = seededRandom() > 0.35 ? (seededRandom() > 0.5 ? 3 : 2) : (seededRandom() > 0.5 ? 1 : 0);
+      } else if (dayIdx > 30) {
+        level = seededRandom() > 0.45 ? (seededRandom() > 0.6 ? 2 : 1) : 0;
+      } else {
+        level = seededRandom() > 0.6 ? (seededRandom() > 0.7 ? 2 : 1) : 0;
+      }
+      // Weekends less active
+      if (d >= 5) level = Math.max(0, level - 1);
+      weekData.push(level);
+    }
+    activityData.push(weekData);
+  }
+
+  // Build the grid
+  // Month labels row
+  let html = '<div style="display:grid;grid-template-columns:20px repeat(12,1fr);gap:2px;margin-bottom:4px">';
+  html += '<div></div>'; // Corner
+  // Calculate months for each week
+  const baseDate = new Date('2026-01-26'); // 12 weeks before April 18
+  for (let w = 0; w < weeks; w++) {
+    const weekStart = new Date(baseDate);
+    weekStart.setDate(weekStart.getDate() + w * 7);
+    if (w === 0 || weekStart.getDate() <= 7) {
+      html += `<div style="font-size:10px;color:var(--text-muted);text-align:center">${months[weekStart.getMonth()]}</div>`;
+    } else {
+      html += '<div></div>';
+    }
+  }
+  html += '</div>';
+
+  // Day rows
+  for (let d = 0; d < 7; d++) {
+    html += '<div style="display:grid;grid-template-columns:20px repeat(12,1fr);gap:2px;margin-bottom:2px">';
+    // Day label
+    const showLabel = d === 0 || d === 2 || d === 4;
+    html += `<div style="font-size:10px;color:var(--text-muted);display:flex;align-items:center;justify-content:flex-end;padding-right:4px">${showLabel ? days[d] : ''}</div>`;
+    // Cells
+    for (let w = 0; w < weeks; w++) {
+      const level = activityData[w][d];
+      html += `<div class="heatmap-cell heatmap-level-${level}" style="width:12px;height:12px;border-radius:2px" title="${level} events"></div>`;
+    }
+    html += '</div>';
+  }
+
+  container.innerHTML = html;
+}
+
+function toggleActivityFilter(pill, group) {
+  document.querySelectorAll(`[data-afilter="${group}"]`).forEach(p => p.classList.remove('active'));
+  pill.classList.add('active');
+  showToast('Filter applied: ' + pill.textContent);
+}
+
+/* ========================================
+   RESPONSIVE: collapse layouts on small screens
+   ======================================== */
+function handleResponsive() {
+  const w = window.innerWidth;
+  const sessionsLayout = document.getElementById('sessionsLayout');
+  const activityLayout = document.getElementById('activityLayout');
+  const auditGrid = document.getElementById('auditGrid');
+
+  if (sessionsLayout) {
+    sessionsLayout.style.gridTemplateColumns = w < 900 ? '1fr' : '1fr 380px';
+  }
+  if (activityLayout) {
+    activityLayout.style.gridTemplateColumns = w < 900 ? '1fr' : '1fr 320px';
+  }
+  if (auditGrid) {
+    auditGrid.style.gridTemplateColumns = w < 900 ? '1fr' : 'repeat(2, 1fr)';
+  }
+}
+
+window.addEventListener('resize', handleResponsive);
+
+/* ========================================
+   INIT
+   ======================================== */
+buildProjectCards();
+buildTable();
+populateStaleHeatTrails();
+buildRisksTable();
+buildHeatmap();
+handleResponsive();
+</script>
+</body>
+</html>
