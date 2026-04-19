@@ -53,10 +53,30 @@ Amendments:
 SteerCo Companion: No blocking concerns. 3 advisory notes (parser fragility → solved by DB, auth gap inherited, scope clarified).
 
 --- Developer ---
-[Not yet started]
+Features implemented: 21 (P001-P021)
+Backend: 6 new files (types, markdown-parser, scanner, cache, routes, barrel index) — 1,178 lines
+Frontend: 3 new files (index.html, portfolio.css, portfolio.js) — 4,420 lines
+Server integration: 3 files modified (server.ts, index.ts, types.ts) — minimal changes
+Existing dashboard: UNTOUCHED (renamed to sessions.html, embedded as iframe in Sessions tab)
+Smoke test findings:
+  - Feature list parser needed fix for { features: [...] } wrapper — fixed
+  - Health score bottomed at 0% — fixed with proportional calculation (now 32%)
+  - Sessions tab navigated away — fixed with iframe embed
+  - Audit filter pills non-functional — fixed with scroll-to-tile behaviour
+Merge: portfolio.html → index.html (landing page), index.html → sessions.html
+Scanner: discovers 50 real projects in 2 seconds
+APIs: all 10 endpoints responding
 
 --- Tester ---
-[Not yet started]
+[Skipped — user chose to merge and iterate live rather than run formal test phase]
 
 --- Release Manager ---
-[Not yet started]
+[Skipped — merged directly into live dashboard for iterative refinement]
+
+--- Post-Session Notes ---
+User feedback at merge:
+  1. PROJECT_STATUS.md freshness is not a reliable proxy for project activity
+  2. Need a proper database (SQLite) as the single source of truth
+  3. Process enforcement via harness + CLAUDE.md to mandate DB updates at session end
+  4. Regular audit jobs comparing MD files vs DB, surfacing discrepancies as exception queue
+  5. Next project: Portfolio Database Layer (companion project to this UI)

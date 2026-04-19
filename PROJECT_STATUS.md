@@ -1,53 +1,52 @@
 # Command Centre
 
 **Status:** Active
-**Last Active:** 2026-04-17
-**Quick Context:** Web dashboard for monitoring and managing multiple Claude Code sessions from a single view. Windows-native, portable, shareable.
+**Last Active:** 2026-04-19
+**Quick Context:** Web dashboard for monitoring Claude Code sessions AND managing the full project portfolio — sessions, projects, risks, activity, audit. Windows-native, portable, shareable.
 
 ## Current State
 
-- **Version:** 0.2.0 (unreleased — no npm publish yet)
+- **Version:** 0.3.0 (portfolio extension merged)
 - **Server:** Live on `0.0.0.0:4111`, auto-started by launcher + watchdog on boot
-- **Features:** 31 complete, 2 partial, 1 in active backlog, 6 unprioritised
-- **Tests:** 33 Playwright E2E tests
-- **Persistence:** Sessions and feed events survive server restarts (`data/state.json`)
-- **Auto-approve:** ON — all permissions auto-approved, global + per-session toggles in dashboard
+- **Landing page:** Portfolio dashboard (5 tabs: Sessions, Portfolio, Risks, Activity, Audit)
+- **Sessions:** 31 session features complete, 2 partial
+- **Portfolio:** 21 portfolio features built (P001-P021), scanning 50 real projects
+- **Tests:** 33 Playwright E2E tests (session features — portfolio tests not yet written)
+- **Persistence:** Sessions via `data/state.json`, portfolio via in-memory cache with 60s file-scan refresh
+- **Auto-approve:** ON — global + per-session toggles
 
-### What's Live and Working (31 features)
+### Landing Page — Portfolio Dashboard
 
-- Real-time session dashboard (Socket.io WebSocket)
-- Permission approve/deny from dashboard (30s timeout → CLI fallback)
-- Auto-approve permissions with global + per-session toggles, plain English feed messages
-- Desktop toast notifications (PowerShell native, click opens dashboard from Action Centre)
-- Session transcript panel (JSONL parsing, live polling, markdown rendering)
-- Transcript scroll-lock (holds position when scrolled up)
-- Text input to dashboard-managed sessions
-- Click-to-terminal focus (Win32 SetForegroundWindow, launcher PID registration)
-- Session kill with confirmation, session hold/resume
-- Accurate token usage (deduplicated transcript parsing, SDK result events, input+output totals)
-- New Session modal — launcher + quick launch with proper path resolution
-- Launcher auto-starts CC server (health-check + detached spawn)
-- HTTP hooks in launcher cloud template (survive settings sync)
-- Server binds to all interfaces (0.0.0.0:4111, Tailscale/network accessible)
-- Session history persistence (auto-save every 30s, survives restarts)
-- Crash recovery (watchdog auto-restarts on crash)
-- Boot persistence (Windows Startup folder script)
-- Activity feed, dismiss sessions, rename sessions, session start time
+Opening `localhost:4111` now shows the portfolio dashboard with 5 tabs:
 
-### What's Partial
+- **Sessions** — Existing session monitoring (embedded via iframe from sessions.html)
+- **Portfolio** — Board view (bento grid) + List view of all 50 projects, gate queue, stale projects, risk summary, data dictionary audit, activity feed, quick stats. Glassmorphism cards with desaturation decay on stale projects, heat trail activity strips, detail panel on click.
+- **Risks** — Full SteerCo risk register with filters by status and project. Accept/mitigate actions.
+- **Activity** — Timeline of git commits and session activity grouped by date, contribution heatmap, weekly stats.
+- **Audit** — Portfolio health score gauge (currently 32%), data dictionary coverage, status file freshness, feature list coverage, risk exposure summary.
 
-- **B006** — Hold/resume UI works but limited value (claude -p is one-shot)
-- **B007** — Legacy cost estimates for terminal sessions (SDK sessions have accurate CLI cost)
+Global permission bar visible on all tabs. Consistent filter row frame across all tabs.
 
-### Outstanding
+### Architecture
 
-- **B016** — Mobile push notifications (large scope, needs scope decision)
+- Backend: `src/portfolio/` module — types, markdown parsers, directory scanner, in-memory cache, Express API routes under `/api/portfolio/*`
+- Frontend: `public/index.html` (portfolio), `public/portfolio.css`, `public/portfolio.js` — all separate from the sessions dashboard code
+- Sessions dashboard: `public/sessions.html`, `public/styles.css`, `public/app.js` — completely untouched
+
+### What's Partial / Known Issues
+
+- **Data source:** Portfolio data comes from parsing markdown files every 60s — fragile, not a reliable source of truth for activity freshness
+- **Health score:** 32% reflects real state but penalties are coarse
+- **Risk register:** Template file with placeholder rows, so 0 risks shown
+- **B006** — Hold/resume UI limited value (claude -p is one-shot)
+- **Portfolio tests** — No Playwright tests yet for portfolio tabs
 
 ## Next Steps
 
-1. Decide scope for B016 (mobile push: lightweight / Happy Coder / full)
-2. Test responsive CSS on real mobile device
-3. Consider npm publish / GitHub distribution
+1. **Portfolio Database Layer** — SQLite database as source of truth for portfolio data. Sync/ingestion from MD files. Process enforcement via harness + CLAUDE.md to mandate DB updates. Audit exception queue for discrepancies. This is the next project.
+2. Portfolio Playwright E2E tests
+3. B016 — Mobile push notifications (scope decision pending)
+4. npm publish / GitHub distribution (B018)
 
 ## How to Resume
 
@@ -55,28 +54,31 @@
 2. Server is likely already running — check: `curl -s http://localhost:4111/healthz`
 3. If not running: `cd "Command Centre" && npm run build && npm start`
 4. Or use watchdog: `npm run watchdog` (auto-restarts on crash)
-5. Dashboard at http://localhost:4111 (or `http://<machine-ip>:4111` from other devices)
-6. **Auto-approve is ON** — toggle in metrics bar or per-session lock icon on cards
-7. Sessions persist across restarts (`data/state.json`)
-8. Boot startup installed: `%APPDATA%/Microsoft/Windows/Start Menu/Programs/Startup/CommandCentre.bat`
-9. Key docs: `BACKLOG.md`, `BACKLOG-DESIGN.md`, `ARCHITECTURE.md`, `INSTALL.md`
-10. Source: `src/` (TypeScript), `public/` (frontend), `scripts/` (watchdog + installer)
+5. Dashboard at http://localhost:4111 — opens portfolio view (all 5 tabs)
+6. Sessions-only view: http://localhost:4111/sessions.html
+7. **Auto-approve is ON** — toggle in metrics bar
+8. Sessions persist across restarts (`data/state.json`)
+9. Portfolio data refreshes every 60s from file system scan
+10. Key docs: `portfolio-design-spec.md`, `portfolio-design-research.md`, `ARCHITECTURE.md`
+11. Source: `src/` (TypeScript), `src/portfolio/` (portfolio backend), `public/` (frontend)
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `src/` | TypeScript server source |
-| `public/` | Dashboard frontend (index.html, styles.css, app.js) |
-| `scripts/watchdog.js` | Crash recovery — respawns server on non-zero exit |
-| `scripts/install-service.js` | Installs boot startup via Windows Startup folder |
-| `data/state.json` | Persisted session state (auto-saved, gitignored) |
-| `config.json` | Runtime config (host, port, auto-approve, timeouts, notifications) |
-| `BACKLOG.md` | Current backlog with statuses |
-| `BACKLOG-DESIGN.md` | Technical designs for backlog items |
-| `ARCHITECTURE.md` | Technical architecture, hook payloads, permission holding pattern |
-| `INSTALL.md` | Setup guide for own machines + colleague installs |
-| `feature-list.json` | Machine-readable feature list with live_status per feature |
+| `src/portfolio/` | Portfolio backend — types, parsers, scanner, cache |
+| `src/routes/portfolio.ts` | Portfolio API routes (`/api/portfolio/*`) |
+| `public/index.html` | Portfolio dashboard (landing page) |
+| `public/portfolio.css` | Portfolio styles (glassmorphism, aurora, bento grid) |
+| `public/portfolio.js` | Portfolio frontend JS (API-driven rendering) |
+| `public/sessions.html` | Sessions dashboard (original CC, embedded as iframe in Sessions tab) |
+| `public/styles.css` | Sessions dashboard styles (unchanged) |
+| `public/app.js` | Sessions dashboard JS (unchanged) |
+| `portfolio-design-spec.md` | Full design specification for the portfolio extension |
+| `portfolio-design-research.md` | Design research (market analysis, techniques, references) |
+| `portfolio-feature-list.json` | Portfolio feature list (21 features) |
+| `config.json` | Runtime config (host, port, auto-approve, portfolio roots) |
+| `data/state.json` | Persisted session state |
 
 ## Session Log
 
@@ -86,4 +88,5 @@
 | 2026-04-12 | Design + MVP build. 17 features. Transcript panel, permissions, toasts, scroll-lock, rename. 21 tests. |
 | 2026-04-13 | Text input (F029). Priority backlog B001-B009. Launcher integration. 33 tests. |
 | 2026-04-15 | Terminal focus fix (PID registration). Per-session token counts. Spawner path fix. |
-| 2026-04-16-17 | Major session. Backlog audit — corrected feature statuses, added B010-B017. Built: B014 (scroll-lock fix), B012 (auto-approve ON), B002 (launcher path), B008 (0.0.0.0 binding), B010 (accurate tokens — dedup + SDK result events), B011 (PowerShell toasts replacing node-notifier), B017 (global + per-session auto-approve toggles with plain English feed), C (session persistence to data/state.json), B003 (watchdog crash recovery + Windows Startup boot). Fixed totalTokens to exclude cache read/creation. Removed node-notifier dependency. Updated all docs. |
+| 2026-04-16-17 | Major session. B010-B017 built. PowerShell toasts, persistence, watchdog, auto-approve, accurate tokens. |
+| 2026-04-18-19 | Portfolio extension. Full build harness run: design (4 iterations, 3 directions → combined), build (21 features — parsers, scanner, cache, API, 5-tab frontend with glassmorphism/aurora/heat trails/decay), merge as landing page. 50 projects discovered. Health score 32%. Next: database layer as source of truth. |

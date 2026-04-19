@@ -94,21 +94,63 @@ Working but with known limitations.
 
 ---
 
+## Complete — Portfolio Extension (21 features)
+
+Built 2026-04-18-19. Portfolio dashboard merged as landing page.
+
+| ID | Feature | Notes |
+|----|---------|-------|
+| P001 | Markdown parser (PROJECT_STATUS.md) | Lenient, handles missing sections |
+| P002 | Project directory scanner | 2-level deep, finds 50 projects in 2s |
+| P003 | Portfolio state cache | In-memory, 60s refresh, Socket.io broadcast |
+| P004 | Portfolio API routes | 10 endpoints under /api/portfolio/* |
+| P005 | Portfolio board view (bento grid) | Gate queue, stale projects, project cards, audit tiles |
+| P006 | Project detail panel | Slide-in, features/commits/session log/risks |
+| P007 | SteerCo gate queue | Amber-tinted hero tile, Open Review + Launch Session |
+| P008 | Session launching from portfolio | Socket event to spawner |
+| P009 | Activity feed tile | Last 10 activities in board view |
+| P010 | Risk register view (Risks tab) | Full table with filters, expandable rows |
+| P011 | Risk accept/mitigate actions | POST to API (DB write-back in next phase) |
+| P012 | Data dictionary audit tile | ✓/✗ per project with freshness |
+| P013 | Tab navigation (5 tabs) | Consistent filter row frame across all tabs |
+| P014 | PROJECT_REGISTRY.md parser | Via scanner directory walk |
+| P015 | Git activity collector | git log per repo, 5s timeout |
+| P016 | Review document detection | Glob for review.html, prototype/index.html |
+| P017 | Real-time portfolio updates | Socket.io portfolio:update event |
+| P018 | Feature list progress | Parses { features: [...] } format |
+| P019 | Portfolio configuration | projectRoots, refreshInterval, staleness thresholds |
+| P020 | Health monitoring | Proportional health score in /healthz extension |
+| P021 | Activity timeline + heatmap (Activity tab) | Grouped by date, contribution grid |
+
+---
+
+## Active Backlog
+
+| ID | Feature | Priority | Detail |
+|----|---------|----------|--------|
+| P-DB | Portfolio database layer | **Critical** | SQLite as source of truth. Sync from MD files. Process enforcement via harness + CLAUDE.md. Audit exception queue. **Next project.** |
+| P-TEST | Portfolio Playwright tests | High | E2E tests for all 5 tabs |
+| B016 | Mobile push notifications | Medium | Scope decision pending |
+| B018 | GitHub distribution + auto-pull | Medium | Move to GitHub repo, npm publish, auto-update |
+
+---
+
 ## Known Issues
 
 1. **Pre-existing sessions invisible** — Sessions started before hooks were injected don't appear. Fundamental limitation.
-2. **Session names derived from folder only** — `--name` flag may not be in hook payload. See item A.
-3. **CLI questions/options invisible** — No hook fires when Claude asks questions. See B015.
-4. **Mobile CSS untested** — B008 binding works but responsive CSS never tested on real phone.
-5. **B007 cost estimates** — Terminal sessions use hardcoded pricing which may drift. SDK sessions have accurate CLI-reported cost.
+2. **Session names derived from folder only** — `--name` flag may not be in hook payload.
+3. **Portfolio data from file parsing** — MD files are not a reliable source of truth for activity. Database layer (P-DB) will fix.
+4. **Health score 32%** — Reflects real state but coarse. Many projects missing data dictionaries is expected, not a crisis.
+5. **Risk register empty** — Template file with placeholder rows. Risks will populate as SteerCo Companion is used.
+6. **Portfolio tests not written** — No Playwright coverage for portfolio tabs yet.
 
 ---
 
 ## Future Ideas (Unscoped)
 
 - Ambient audio/visual indicators for session health
-- Session grouping by project/workspace
 - Cross-session diff viewer (files changed across all sessions)
-- Integration with launcher's approval-reviewer (consolidate approval pipelines)
 - Dark/light theme toggle
 - Session replay (view historical session activity)
+- Portfolio mobile push notifications for gate arrivals
+- Trend visualisations for portfolio health over time
