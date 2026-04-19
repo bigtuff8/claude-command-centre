@@ -345,14 +345,15 @@ export function parseFeatureList(filePath: string): { done: number; total: numbe
     const content = fs.readFileSync(filePath, 'utf-8');
     const data = JSON.parse(content);
 
-    // Expect an array of features, each with a `passes` boolean
-    if (!Array.isArray(data)) {
-      console.warn(`${LOG_PREFIX} Feature list at ${filePath} is not an array`);
+    // Handle both array format and { features: [...] } wrapper
+    const features = Array.isArray(data) ? data : (data.features || null);
+    if (!Array.isArray(features)) {
+      console.warn(`${LOG_PREFIX} Feature list at ${filePath} has no features array`);
       return null;
     }
 
-    const total = data.length;
-    const done = data.filter((feature: any) => feature.passes === true).length;
+    const total = features.length;
+    const done = features.filter((feature: any) => feature.passes === true).length;
 
     return { done, total };
   } catch (err) {
