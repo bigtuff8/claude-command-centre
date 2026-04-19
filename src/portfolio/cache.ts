@@ -227,39 +227,46 @@ function buildAuditData(projects: PortfolioProject[]): PortfolioAudit[] {
 }
 
 function calculateHealthScore(projects: PortfolioProject[], risks: PortfolioRisk[]): number {
-  let score = 100;
+  // Proportional scoring: each category contributes a weighted percentage
+  // - Data dictionary coverage: 25% weight
+  // - Status file freshness: 25% weight
+  // - Project activity (not stale): 30% weight
+  // - Risk exposure: 20% weight
 
-  for (const project of projects) {
-    // -5 per project missing DATA_DICTIONARY.md
-    if (!project.portfolioProjectHasDataDictionary) {
-      score -= 5;
-    }
+  const total = projects.length;
+  if (total === 0) return 100;
 
-    // -3 per project with stale (>30d) status file
-    if (project.portfolioProjectDaysSinceActive !== null && project.portfolioProjectDaysSinceActive > 30) {
-      score -= 3;
-    }
+  // Active (non-archived) projects only for scoring
+  const active = projects.filter(p =>
+    !p.portfolioProjectStatus.toLowerCase().includes('archived') &&
+    !p.portfolioProjectStatus.toLowerCase().includes('complete')
+  );
+  const activeCount = active.length || 1;
 
-    // -8 per project missing PROJECT_STATUS.md entirely
-    if (project.portfolioProjectLastActive === null && project.portfolioProjectCurrentState === null) {
-      score -= 8;
-    }
-  }
+  // Data dictionary coverage (25 points)
+  const withDict = active.filter(p => p.portfolioProjectHasDataDictionary).length;
+  const dictScore = (withDict / activeCount) * 25;
 
-  for (const risk of risks) {
-    if (risk.riskStatus === 'Open') {
-      if (risk.riskSeverity === 'High' || risk.riskSeverity === 'Critical') {
-        // -4 per open high/critical risk
-        score -= 4;
-      } else if (risk.riskSeverity === 'Medium') {
-        // -2 per open medium risk
-        score -= 2;
-      }
-    }
-  }
+  // Status file freshness (25 points) — projects with status file updated in last 30 days
+  const withFreshStatus = active.filter(p =>
+    p.portfolioProjectLastActive !== null &&
+    p.portfolioProjectDaysSinceActive !== null &&
+    p.portfolioProjectDaysSinceActive <= 30
+  ).length;
+  const freshnessScore = (withFreshStatus / activeCount) * 25;
 
-  // Floor at 0, cap at 100
-  score = Math.max(0, Math.min(100, score));
+  // Activity — not stale (30 points)
+  const notStale = active.filter(p =>
+    p.portfolioProjectStaleness === 'fresh' || p.portfolioProjectStaleness === 'aging'
+  ).length;
+  const activityScore = (notStale / activeCount) * 30;
 
-  return Math.round(score);
+  // Risk exposure (20 points) — starts at 20, reduced by open risks
+  const openHighCritical = risks.filter(r => r.riskStatus === 'Open' && (r.riskSeverity === 'High' || r.riskSeverity === 'Critical')).length;
+  const openMedium = risks.filter(r => r.riskStatus === 'Open' && r.riskSeverity === 'Medium').length;
+  const riskPenalty = Math.min(20, openHighCritical * 5 + openMedium * 2);
+  const riskScore = 20 - riskPenalty;
+
+  const finalScore = Math.max(0, Math.min(100, Math.round(dictScore + freshnessScore + activityScore + riskScore)));
+  return finalScore;
 }

@@ -1503,22 +1503,21 @@ function switchTab(tabName) {
   activeTab = tabName;
 
   // Update nav tabs
-  const tabs = document.querySelectorAll('.nav-tab');
+  var tabs = document.querySelectorAll('.nav-tab');
   tabs.forEach(function (tab) {
-    if (tab.tagName === 'A') return; // Skip link tabs
     tab.classList.toggle('active', tab.dataset.tab === tabName);
   });
 
   // Show/hide tab content
-  const allTabs = ['portfolio', 'risks', 'activity', 'audit'];
+  var allTabs = ['sessions', 'portfolio', 'risks', 'activity', 'audit'];
   allTabs.forEach(function (t) {
-    const tabEl = el('tab-' + t);
+    var tabEl = el('tab-' + t);
     if (tabEl) tabEl.style.display = (t === tabName) ? '' : 'none';
   });
 
   // Show/hide tab filters
   allTabs.forEach(function (t) {
-    const filterEl = el('filters-' + t);
+    var filterEl = el('filters-' + t);
     if (filterEl) filterEl.style.display = (t === tabName) ? '' : 'none';
   });
 }
@@ -1528,8 +1527,8 @@ function switchTab(tabName) {
 function setupEventListeners() {
   // Tab switching
   document.querySelectorAll('.nav-tab').forEach(function (tab) {
-    if (tab.tagName === 'A') return; // Links handle their own navigation
-    tab.addEventListener('click', function () {
+    tab.addEventListener('click', function (e) {
+      e.preventDefault();
       switchTab(this.dataset.tab);
     });
   });
@@ -1654,15 +1653,6 @@ function setupEventListeners() {
     }
   });
 
-  // Sync button (if present elsewhere, or the auto-approve button, etc.)
-  // New Session button navigates to the sessions page
-  const newSessionBtn = el('newSessionBtn');
-  if (newSessionBtn) {
-    newSessionBtn.addEventListener('click', function () {
-      window.location.href = '/';
-    });
-  }
-
   // Audit "View full risk register" link
   const auditRiskLink = el('auditRiskLink');
   if (auditRiskLink) {
@@ -1671,8 +1661,42 @@ function setupEventListeners() {
     });
   }
 
+  // Audit category filters — scroll to relevant tile
+  document.querySelectorAll('#auditCategoryFilters .pill').forEach(function (pill) {
+    pill.addEventListener('click', function () {
+      document.querySelectorAll('#auditCategoryFilters .pill').forEach(function (p) { p.classList.remove('active'); });
+      this.classList.add('active');
+      var category = this.textContent.trim();
+      var tileMap = {
+        'Data Dictionaries': 'auditDictTile',
+        'Status Files': 'auditFreshnessTile',
+        'Feature Lists': 'auditFeaturesTile',
+        'Risk Exposure': 'auditRiskTile'
+      };
+      var targetId = tileMap[category];
+      if (targetId) {
+        var target = el(targetId);
+        if (target) {
+          // Highlight the tile briefly and scroll to it
+          target.style.boxShadow = '0 0 0 2px var(--blue)';
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setTimeout(function () { target.style.boxShadow = ''; }, 2000);
+        }
+      }
+      // 'All Categories' shows all — no scrolling needed
+    });
+  });
+
+  // New Session button switches to sessions tab
+  var newSessionBtn = el('newSessionBtn');
+  if (newSessionBtn) {
+    newSessionBtn.addEventListener('click', function () {
+      switchTab('sessions');
+    });
+  }
+
   // List view should be hidden by default (board is active)
-  const listView = el('listView');
+  var listView = el('listView');
   if (listView) listView.style.display = 'none';
 }
 
