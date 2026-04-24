@@ -8,15 +8,15 @@
 const fs = require('fs');
 const path = require('path');
 
-const WATCHDOG_PATH = path.join(__dirname, 'watchdog.js');
+const AUTO_UPDATE_PATH = path.join(__dirname, 'auto-update.js');
 const NODE_PATH = process.execPath;
 const BAT_PATH = path.join(__dirname, 'start-watchdog.bat');
 
-// Create the .bat launcher
+// Create the .bat launcher — runs auto-update then watchdog
 const batContent = [
   '@echo off',
   `cd /d "${path.join(__dirname, '..')}"`,
-  `"${NODE_PATH}" "${WATCHDOG_PATH}"`,
+  `"${NODE_PATH}" "${AUTO_UPDATE_PATH}" --start`,
 ].join('\r\n');
 
 fs.writeFileSync(BAT_PATH, batContent, 'utf-8');

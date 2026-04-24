@@ -131,7 +131,7 @@ Built 2026-04-18-19. Portfolio dashboard merged as landing page.
 | P-DB | Portfolio database layer | **Critical** | SQLite as source of truth. Sync from MD files. Process enforcement via harness + CLAUDE.md. Audit exception queue. **Next project.** |
 | P-TEST | Portfolio Playwright tests | High | E2E tests for all 5 tabs |
 | B016 | Mobile push notifications | Medium | Scope decision pending |
-| B018 | GitHub distribution + auto-pull | Medium | Move to GitHub repo, npm publish, auto-update |
+| B018 | GitHub distribution + auto-pull | Medium | **Phase 1 complete:** repo on GitHub, auto-update script pulls on boot. **Phase 2:** scheduled task for periodic checks, multi-device clone/setup script. |
 
 ---
 

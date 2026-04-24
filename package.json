@@ -14,6 +14,8 @@
     "setup:wizard": "node setup-wizard.js",
     "test": "npx playwright test",
     "test:headed": "npx playwright test --headed",
+    "update": "node scripts/auto-update.js",
+    "update:start": "node scripts/auto-update.js --start",
     "watchdog": "node scripts/watchdog.js",
     "svc:install": "node scripts/install-service.js",
     "svc:uninstall": "node -e \"require('fs').unlinkSync(require('path').join(process.env.APPDATA,'Microsoft','Windows','Start Menu','Programs','Startup','CommandCentre.bat'));console.log('Removed startup script')\"",
