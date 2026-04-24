@@ -1,6 +1,6 @@
 # Command Centre — Product Backlog
 
-**Last Updated:** 2026-04-16
+**Last Updated:** 2026-04-24
 **Referenced by:** feature-list.json, progress.txt
 
 ---
@@ -84,7 +84,6 @@ Working but with known limitations.
 
 | ID | Feature | Detail |
 |----|---------|--------|
-| B018 | GitHub-based distribution with auto-pull | Move Command Centre to a GitHub repo. Use GitHub Actions to tag releases. Each device pulls updates automatically (git pull on boot/schedule or GitHub Actions webhook). Eliminates OneDrive sync dependency for code — OneDrive remains for config/state only. Enables: version-controlled releases, multi-device consistency, rollback capability, CI (lint/test on push). Approach: (1) init repo + push to GitHub, (2) setup script per device clones repo + installs deps + configures startup, (3) auto-update mechanism (cron/scheduled task runs `git pull && npm run build && restart`, or GitHub Actions triggers webhook to each device). Consider: Tailscale funnel for webhook delivery, or simple polling. |
 | A | Launcher passes `--name` to sessions | Session names from `--name` flag instead of folder paths. |
 | B | Send text input to terminal sessions | Extend F029 to terminal sessions via Agent SDK or stdin pipe. |
 | B009 | Drag-and-drop files to sessions | Code exists, never live tested. Dashboard-managed only. |

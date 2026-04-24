@@ -62,30 +62,26 @@ Add the machine to `claude-workspace/launcher/config/devices.json`:
 
 Then build the launcher: `cd claude-workspace/launcher && npm install && npx tsc`
 
-### Persistent server (optional)
+### Persistent server + auto-update (recommended)
 
-If you want the server to survive terminal closures and auto-restart on crash:
+The watchdog keeps the server running (auto-restarts on crash). The auto-updater pulls from GitHub on boot.
 
 ```bash
-# Install pm2 globally (one time)
-npm install -g pm2
+# Install boot startup (one time) — runs auto-update + watchdog on login
+npm run svc:install
 
-# Start with pm2
-npm run pm2:start
-
-# Auto-start on Windows login (one time)
-npm run pm2:startup
+# Or start manually with watchdog (survives crashes, not reboots):
+npm run watchdog
 ```
 
 ### Updating
 
-When you pull new changes (or they sync via OneDrive):
+**Automatic:** If boot startup is installed, the server pulls the latest from GitHub every time you log in.
 
+**Manual:**
 ```bash
 cd "Command Centre"
-npm install    # in case dependencies changed
-npm run build  # recompile TypeScript
-# Restart the server (pm2 auto-restarts, or manually: npm start)
+npm run update    # pull from GitHub, rebuild if changed
 ```
 
 Or just re-run the wizard — it skips steps that are already done:
@@ -163,10 +159,16 @@ npm run pm2:startup   # auto-start on login
 
 ```bash
 cd claude-command-centre
+npm run update    # pulls from GitHub, installs deps if changed, rebuilds
+# Server restarts automatically if watchdog is running
+```
+
+Or manually:
+```bash
 git pull
 npm install
 npm run build
-# Restart: re-run wizard, or npm start, or npm run pm2:restart
+# Restart: re-run wizard, or npm start, or npm run watchdog
 ```
 
 ### No launcher? No problem
@@ -215,7 +217,7 @@ The WebSocket connection dropped. This happens if the server restarts. The dashb
 
 - Check `config.json` has `"notifications": { "enabled": true }`
 - Windows Focus Assist may be suppressing them — check notification settings
-- The `node-notifier` package needs `node-notifier` binaries in node_modules — re-run `npm install`
+- Toasts use native PowerShell — no extra dependencies needed
 
 ### Mobile access via Tailscale
 
@@ -257,6 +259,6 @@ For full technical details, see [ARCHITECTURE.md](ARCHITECTURE.md).
 │                                       Dashboard (browser)         │
 │                                       http://localhost:4111       │
 │                                                                   │
-│  Windows Toast Notifications (node-notifier)                      │
+│  Windows Toast Notifications (PowerShell native)                  │
 └──────────────────────────────────────────────────────────────────┘
 ```

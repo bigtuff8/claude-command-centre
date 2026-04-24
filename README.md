@@ -97,12 +97,15 @@ npm run test:headed  # Watch tests run in browser
 |--------|---------|
 | `npm start` | Start server (foreground) |
 | `npm run build` | Compile TypeScript |
+| `npm run update` | Pull latest from GitHub, rebuild if changed |
+| `npm run update:start` | Pull, rebuild, then start watchdog (used on boot) |
+| `npm run watchdog` | Start server with crash recovery (auto-restarts) |
 | `npm run setup` | Inject HTTP hooks into Claude Code settings |
 | `npm run setup:wizard` | Full setup wizard (recommended for first run) |
+| `npm run svc:install` | Install boot startup (auto-update + watchdog on login) |
+| `npm run svc:uninstall` | Remove boot startup |
+| `npm run svc:status` | Check if boot startup is installed |
 | `npm test` | Run Playwright tests |
-| `npm run pm2:start` | Start with pm2 (persistent, survives terminal close) |
-| `npm run pm2:stop` | Stop pm2 process |
-| `npm run pm2:logs` | View pm2 logs |
 
 ## License
 

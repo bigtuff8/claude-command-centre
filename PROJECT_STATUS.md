@@ -1,13 +1,15 @@
 # Command Centre
 
 **Status:** Active
-**Last Active:** 2026-04-19
+**Last Active:** 2026-04-24
 **Quick Context:** Web dashboard for monitoring Claude Code sessions AND managing the full project portfolio — sessions, projects, risks, activity, audit. Windows-native, portable, shareable.
 
 ## Current State
 
 - **Version:** 0.3.0 (portfolio extension merged)
+- **GitHub:** `bigtuff8/claude-command-centre` (all commits pushed)
 - **Server:** Live on `0.0.0.0:4111`, auto-started by launcher + watchdog on boot
+- **Auto-update:** On boot, pulls latest from GitHub, rebuilds if needed, then starts watchdog
 - **Landing page:** Portfolio dashboard (5 tabs: Sessions, Portfolio, Risks, Activity, Audit)
 - **Sessions:** 31 session features complete, 2 partial
 - **Portfolio:** 21 portfolio features built (P001-P021), scanning 50 real projects
@@ -33,6 +35,14 @@ Global permission bar visible on all tabs. Consistent filter row frame across al
 - Frontend: `public/index.html` (portfolio), `public/portfolio.css`, `public/portfolio.js` — all separate from the sessions dashboard code
 - Sessions dashboard: `public/sessions.html`, `public/styles.css`, `public/app.js` — completely untouched
 
+### Distribution & Auto-Update (B018)
+
+- Code lives in GitHub repo `bigtuff8/claude-command-centre`
+- On boot, `scripts/auto-update.js` runs before the watchdog: fetches from GitHub, pulls if behind (ff-only), conditionally runs `npm install` if `package-lock.json` changed, rebuilds TypeScript, restarts server
+- Manual update: `npm run update` (pull + rebuild) or `npm run update:start` (pull + rebuild + start watchdog)
+- Update log written to `data/update.log`
+- Phase 2 (backlog): scheduled task for periodic checks, multi-device setup script
+
 ### What's Partial / Known Issues
 
 - **Data source:** Portfolio data comes from parsing markdown files every 60s — fragile, not a reliable source of truth for activity freshness
@@ -43,10 +53,10 @@ Global permission bar visible on all tabs. Consistent filter row frame across al
 
 ## Next Steps
 
-1. **Portfolio Database Layer** — SQLite database as source of truth for portfolio data. Sync/ingestion from MD files. Process enforcement via harness + CLAUDE.md to mandate DB updates. Audit exception queue for discrepancies. This is the next project.
-2. Portfolio Playwright E2E tests
+1. **Portfolio Database Layer (P-DB)** — SQLite database as source of truth for portfolio data. Sync/ingestion from MD files. Process enforcement via harness + CLAUDE.md to mandate DB updates. Audit exception queue. This is the next project.
+2. Portfolio Playwright E2E tests (P-TEST)
 3. B016 — Mobile push notifications (scope decision pending)
-4. npm publish / GitHub distribution (B018)
+4. B018 Phase 2 — Scheduled auto-update checks, multi-device setup script
 
 ## How to Resume
 
@@ -54,13 +64,14 @@ Global permission bar visible on all tabs. Consistent filter row frame across al
 2. Server is likely already running — check: `curl -s http://localhost:4111/healthz`
 3. If not running: `cd "Command Centre" && npm run build && npm start`
 4. Or use watchdog: `npm run watchdog` (auto-restarts on crash)
-5. Dashboard at http://localhost:4111 — opens portfolio view (all 5 tabs)
-6. Sessions-only view: http://localhost:4111/sessions.html
-7. **Auto-approve is ON** — toggle in metrics bar
-8. Sessions persist across restarts (`data/state.json`)
-9. Portfolio data refreshes every 60s from file system scan
-10. Key docs: `portfolio-design-spec.md`, `portfolio-design-research.md`, `ARCHITECTURE.md`
-11. Source: `src/` (TypeScript), `src/portfolio/` (portfolio backend), `public/` (frontend)
+5. To pull latest and rebuild: `npm run update`
+6. Dashboard at http://localhost:4111 — opens portfolio view (all 5 tabs)
+7. Sessions-only view: http://localhost:4111/sessions.html
+8. **Auto-approve is ON** — toggle in metrics bar
+9. Sessions persist across restarts (`data/state.json`)
+10. Portfolio data refreshes every 60s from file system scan
+11. Key docs: `portfolio-design-spec.md`, `portfolio-design-research.md`, `ARCHITECTURE.md`
+12. Source: `src/` (TypeScript), `src/portfolio/` (portfolio backend), `public/` (frontend)
 
 ## Key Files
 
@@ -74,11 +85,15 @@ Global permission bar visible on all tabs. Consistent filter row frame across al
 | `public/sessions.html` | Sessions dashboard (original CC, embedded as iframe in Sessions tab) |
 | `public/styles.css` | Sessions dashboard styles (unchanged) |
 | `public/app.js` | Sessions dashboard JS (unchanged) |
+| `scripts/auto-update.js` | Auto-updater — git pull, npm install, build, restart |
+| `scripts/watchdog.js` | Crash recovery — respawns server on non-zero exit |
+| `scripts/install-service.js` | Installs boot startup (auto-update + watchdog) |
 | `portfolio-design-spec.md` | Full design specification for the portfolio extension |
 | `portfolio-design-research.md` | Design research (market analysis, techniques, references) |
 | `portfolio-feature-list.json` | Portfolio feature list (21 features) |
 | `config.json` | Runtime config (host, port, auto-approve, portfolio roots) |
 | `data/state.json` | Persisted session state |
+| `data/update.log` | Auto-update history log |
 
 ## Session Log
 
@@ -89,5 +104,5 @@ Global permission bar visible on all tabs. Consistent filter row frame across al
 | 2026-04-13 | Text input (F029). Priority backlog B001-B009. Launcher integration. 33 tests. |
 | 2026-04-15 | Terminal focus fix (PID registration). Per-session token counts. Spawner path fix. |
 | 2026-04-16-17 | Major session. B010-B017 built. PowerShell toasts, persistence, watchdog, auto-approve, accurate tokens. |
-| 2026-04-18-19 | Portfolio extension. Full build harness run: design (4 iterations, 3 directions → combined), build (21 features — parsers, scanner, cache, API, 5-tab frontend with glassmorphism/aurora/heat trails/decay), merge as landing page. 50 projects discovered. Health score 32%. Next: database layer as source of truth. |
-| 2026-04-24 | B018 Phase 1: Pushed 8 unpushed commits to GitHub (bigtuff8/claude-command-centre). Created auto-update script (`scripts/auto-update.js`) — git pull, conditional npm install, rebuild, server restart. Integrated into boot startup (auto-update runs before watchdog on login). Added `npm run update` and `npm run update:start` scripts. |
+| 2026-04-18-19 | Portfolio extension. Full build harness run: design (4 iterations, 3 directions combined), build (21 features — parsers, scanner, cache, API, 5-tab frontend with glassmorphism/aurora/heat trails/decay), merge as landing page. 50 projects discovered. Health score 32%. |
+| 2026-04-24 | B018 Phase 1: Pushed 8 unpushed commits to GitHub. Created auto-update script (`scripts/auto-update.js`) — git pull, conditional npm install, rebuild, server restart. Integrated into boot startup (auto-update runs before watchdog on login). Added `npm run update` and `npm run update:start` scripts. Configured git identity on desktop. Updated all project docs. |
