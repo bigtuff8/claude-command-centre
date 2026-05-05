@@ -1,21 +1,22 @@
 # Command Centre
 
 **Status:** Active
-**Last Active:** 2026-04-24
+**Last Active:** 2026-05-05
 **Quick Context:** Web dashboard for monitoring Claude Code sessions AND managing the full project portfolio — sessions, projects, risks, activity, audit. Windows-native, portable, shareable.
 
 ## Current State
 
-- **Version:** 0.3.0 (portfolio extension merged)
+- **Version:** 0.4.0 (harness enforcement engine)
 - **GitHub:** `bigtuff8/claude-command-centre` (all commits pushed)
 - **Server:** Live on `0.0.0.0:4111`, auto-started by launcher + watchdog on boot
 - **Auto-update:** On boot, pulls latest from GitHub, rebuilds if needed, then starts watchdog
 - **Landing page:** Portfolio dashboard (5 tabs: Sessions, Portfolio, Risks, Activity, Audit)
 - **Sessions:** 31 session features complete, 2 partial
 - **Portfolio:** 21 portfolio features built (P001-P021), scanning 50 real projects
-- **Tests:** 33 Playwright E2E tests (session features — portfolio tests not yet written)
-- **Persistence:** Sessions via `data/state.json`, portfolio via in-memory cache with 60s file-scan refresh
-- **Auto-approve:** ON — global + per-session toggles
+- **Harness enforcement:** 4-layer engine (checkpoints, state machine, PreToolUse enforcement, phase orchestrator)
+- **Tests:** 33 Playwright E2E tests (sessions) + 25 harness enforcement tests = 58 total
+- **Persistence:** Sessions via `data/state.json`, portfolio via in-memory cache with 60s file-scan refresh, harness via `data/harness-ledger.jsonl`
+- **Auto-approve:** ON — global + per-session toggles (harness enforcement runs BEFORE auto-approve)
 
 ### Landing Page — Portfolio Dashboard
 
@@ -43,20 +44,36 @@ Global permission bar visible on all tabs. Consistent filter row frame across al
 - Update log written to `data/update.log`
 - Phase 2 (backlog): scheduled task for periodic checks, multi-device setup script
 
+### Harness Enforcement Engine (New — v0.4.0)
+
+4-layer enforcement engine that prevents Claude from skipping harness steps:
+
+- **Layer 1 — Checkpoint files:** `.harness/` dir in project folders, JSON with artefact hashes, server-side validation
+- **Layer 2 — State machine:** `harness-state.json` per project, phase transitions, rework cycles, overrides. Centralised `data/harness-ledger.jsonl` feeds portfolio reporting.
+- **Layer 3 — PreToolUse enforcement:** Denies tool calls that violate phase rules. `mustReadBefore` (must read agent prompt before writing), `blockWrite` (no code in init/design/test), `blockBash` (no commit in init, no push with failing tests), `requireCheckpoint` (previous phase must be complete).
+- **Layer 4 — Phase orchestrator:** Generates context-rich prompts per phase, validates transition readiness, executes phase advances via REST API.
+
+API endpoints: `/api/harness/status`, `/create`, `/advance`, `/transition`, `/override`, `/pause`, `/gate/clear`, `/ledger`, `/projects`, `/summary`, `/transition-ready`, `/phase-prompt`, `/validate`
+
+All 7 agent prompts updated with mandatory checkpoint writing sections.
+
 ### What's Partial / Known Issues
 
-- **Data source:** Portfolio data comes from parsing markdown files every 60s — fragile, not a reliable source of truth for activity freshness
+- **Data source:** Portfolio data comes from parsing markdown files every 60s — fragile, not a reliable source of truth for activity freshness. Harness ledger provides structured data for harness-managed projects.
 - **Health score:** 32% reflects real state but penalties are coarse
 - **Risk register:** Template file with placeholder rows, so 0 risks shown
 - **B006** — Hold/resume UI limited value (claude -p is one-shot)
 - **Portfolio tests** — No Playwright tests yet for portfolio tabs
+- **Harness dashboard UI** — No visual panel for harness control yet (API-only). Phase 2.
+- **Portfolio config:** Was using wrong username in fallback paths. Fixed to use `config.json` with correct paths.
 
 ## Next Steps
 
-1. **Portfolio Database Layer (P-DB)** — SQLite database as source of truth for portfolio data. Sync/ingestion from MD files. Process enforcement via harness + CLAUDE.md to mandate DB updates. Audit exception queue. This is the next project.
-2. Portfolio Playwright E2E tests (P-TEST)
-3. B016 — Mobile push notifications (scope decision pending)
-4. B018 Phase 2 — Scheduled auto-update checks, multi-device setup script
+1. **Harness dashboard UI** — Visual panel in Command Centre for harness control (phase progress, file read tracking, override buttons, gate UI)
+2. **Portfolio Database Layer (P-DB)** — SQLite database as source of truth for portfolio data. Harness ledger already provides structured data for harness-managed projects.
+3. Portfolio Playwright E2E tests (P-TEST)
+4. B016 — Mobile push notifications (scope decision pending)
+5. B018 Phase 2 — Scheduled auto-update checks, multi-device setup script
 
 ## How to Resume
 
@@ -94,6 +111,11 @@ Global permission bar visible on all tabs. Consistent filter row frame across al
 | `config.json` | Runtime config (host, port, auto-approve, portfolio roots) |
 | `data/state.json` | Persisted session state |
 | `data/update.log` | Auto-update history log |
+| `src/harness/` | Harness enforcement engine — types, state, checkpoints, rules, ledger, orchestrator |
+| `src/routes/harness.ts` | Harness REST API routes (`/api/harness/*`) |
+| `tests/harness.spec.ts` | 25 Playwright integration tests for harness enforcement |
+| `data/harness-ledger.jsonl` | Centralised harness event log (append-only) |
+| `data/harness-projects.json` | Computed snapshot of harness state per project |
 
 ## Session Log
 
@@ -106,3 +128,4 @@ Global permission bar visible on all tabs. Consistent filter row frame across al
 | 2026-04-16-17 | Major session. B010-B017 built. PowerShell toasts, persistence, watchdog, auto-approve, accurate tokens. |
 | 2026-04-18-19 | Portfolio extension. Full build harness run: design (4 iterations, 3 directions combined), build (21 features — parsers, scanner, cache, API, 5-tab frontend with glassmorphism/aurora/heat trails/decay), merge as landing page. 50 projects discovered. Health score 32%. |
 | 2026-04-24 | B018 Phase 1: Pushed 8 unpushed commits to GitHub. Created auto-update script (`scripts/auto-update.js`) — git pull, conditional npm install, rebuild, server restart. Integrated into boot startup (auto-update runs before watchdog on login). Added `npm run update` and `npm run update:start` scripts. Configured git identity on desktop. Updated all project docs. |
+| 2026-05-05 | **Harness Enforcement Engine (v0.4.0).** Root cause analysis of harness non-compliance. Designed 4-layer enforcement (SteerCo review: 8 sections, 3 amendments, all approved). Built Layers 1-3 (checkpoints, state machine, PreToolUse enforcement, ledger) + Layer 4 (orchestrator). Updated all 7 agent prompts with checkpoint writing. 25 Playwright tests passing. Fixed portfolio config (wrong username in fallback paths). Two commits pushed to GitHub. |
