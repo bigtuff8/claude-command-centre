@@ -40,12 +40,14 @@ export function getOrCreateSession(sessionId: string, cwd?: string, permissionMo
       lastActivity: new Date(),
       toolCount: 0,
       filesModified: new Set(),
+      filesReadThisSession: new Set(),
       events: [],
       pendingPermission: null,
       transcriptPath: null,
       terminalPid: null,
       usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, totalCostUSD: 0, model: null, lastUpdated: null },
       autoApprove: null,
+      harnessPhase: null,
     };
     sessions.set(sessionId, session);
     markDirty();
@@ -97,12 +99,14 @@ export function createSdkSession(sessionId: string, cwd: string, name: string, p
     lastActivity: new Date(),
     toolCount: 0,
     filesModified: new Set(),
+    filesReadThisSession: new Set(),
     events: [],
     pendingPermission: null,
     transcriptPath: null,
     terminalPid: null,
     usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, totalCostUSD: 0, model: null, lastUpdated: null },
     autoApprove: null,
+    harnessPhase: null,
   };
   sessions.set(sessionId, session);
   markDirty();

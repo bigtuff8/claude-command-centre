@@ -11,6 +11,7 @@ import { readTranscript, readUsageFromTranscript } from './services/transcript';
 import { focusTerminalWindow, resolveTerminalWindowPid } from './services/focus';
 import { createHooksRouter } from './routes/hooks';
 import { createPortfolioRouter } from './routes/portfolio';
+import { createHarnessRouter } from './routes/harness';
 import { initSocketHandler } from './socket/handler';
 
 export function createApp(config: AppConfig) {
@@ -45,6 +46,10 @@ export function createApp(config: AppConfig) {
   // Portfolio API routes
   const portfolioRouter = createPortfolioRouter();
   app.use('/api/portfolio', portfolioRouter);
+
+  // Harness enforcement API routes
+  const harnessRouter = createHarnessRouter(broadcast);
+  app.use('/api/harness', harnessRouter);
 
   // Health check
   app.get('/healthz', (_req, res) => {
@@ -160,14 +165,14 @@ export function createApp(config: AppConfig) {
   });
 
   // API: focus terminal window for a session
-  app.post('/api/sessions/:id/focus', (req, res) => {
+  app.post('/api/sessions/:id/focus', async (req, res) => {
     const session = getSession(req.params.id);
     if (!session) {
       res.status(404).json({ error: 'Session not found' });
       return;
     }
-    focusTerminalWindow(session.terminalPid, session.name, session.project);
-    res.json({ ok: true });
+    const focused = await focusTerminalWindow(session.terminalPid, session.name, session.project);
+    res.json({ ok: focused });
   });
 
   // Socket.io handler

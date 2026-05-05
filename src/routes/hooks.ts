@@ -3,6 +3,9 @@ import { HookPayload, FeedEventDTO, AppConfig } from '../types';
 import { getOrCreateSession, addEvent, addFeedEvent, sessionToDTO } from '../state/sessions';
 import { createPermissionRequest, isAutoPassTool } from '../services/permission';
 import { notifyPermissionRequest, notifySessionComplete } from '../services/notifications';
+import { loadHarnessState } from '../harness/state';
+import { checkPhaseRules } from '../harness/rules';
+import { appendLedgerEvent } from '../harness/ledger';
 // Terminal PID is now resolved via the registry (populated by the launcher's
 // POST to /api/register-terminal). The getOrCreateSession() call auto-applies
 // the registry lookup, so no additional discovery logic is needed here.
@@ -147,9 +150,66 @@ async function handlePreToolUse(req: Request, res: Response): Promise<void> {
 
   // Auto-pass tools that don't need permission prompting
   if (isAutoPassTool(toolName, session.permissionMode)) {
+    // Track file reads for harness mustReadBefore enforcement
+    if (toolName === 'Read' && toolInput.file_path) {
+      session.filesReadThisSession.add(String(toolInput.file_path));
+    }
     broadcastFn('session-updated', sessionToDTO(session));
     res.json({});
     return;
+  }
+
+  // --- Harness enforcement (runs BEFORE auto-approve) ---
+  const harnessState = loadHarnessState(session.project);
+  if (harnessState) {
+    session.harnessPhase = harnessState.harnessCurrentPhase;
+    const violation = checkPhaseRules(harnessState, toolName, toolInput, session.filesReadThisSession);
+    if (violation) {
+      console.log(`[Harness] DENIED: ${session.name} → ${toolName}: ${violation.violationReason}`);
+
+      appendLedgerEvent({
+        ledgerEventType: 'violation',
+        ledgerTimestamp: new Date().toISOString(),
+        ledgerProjectPath: harnessState.harnessProjectPath,
+        ledgerProjectName: harnessState.harnessProject,
+        ledgerHarness: harnessState.harnessType,
+        ledgerMode: harnessState.harnessMode,
+        ledgerPhase: harnessState.harnessCurrentPhase,
+        ledgerSessionId: session.id,
+        ledgerDetail: {
+          rule: violation.violationRule,
+          toolBlocked: toolName,
+          targetFile: toolInput.file_path || toolInput.command || '',
+        },
+      });
+
+      const violationFeed: FeedEventDTO = {
+        timestamp: new Date().toISOString(),
+        sessionId: session.id,
+        sessionName: session.name,
+        eventName: 'HarnessViolation',
+        toolName,
+        detail: `[HARNESS] ${violation.violationReason}`,
+      };
+      addFeedEvent(violationFeed);
+      broadcastFn('feed-event', violationFeed);
+      broadcastFn('harness-violation', {
+        sessionId: session.id,
+        phase: harnessState.harnessCurrentPhase,
+        violation: violation.violationReason,
+        fix: violation.violationFix,
+        rule: violation.violationRule,
+      });
+
+      res.json({
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'deny',
+          permissionDecisionReason: `[HARNESS] ${violation.violationReason}. Required: ${violation.violationFix}`,
+        },
+      });
+      return;
+    }
   }
 
   // B012/B017: Auto-approve permissions (session-level overrides global)
@@ -239,6 +299,11 @@ function handlePostToolUse(req: Request, res: Response): void {
   // Track modified files
   if (['Edit', 'Write'].includes(toolName) && toolInput.file_path) {
     session.filesModified.add(String(toolInput.file_path));
+  }
+
+  // Track read files for harness mustReadBefore enforcement
+  if (toolName === 'Read' && toolInput.file_path) {
+    session.filesReadThisSession.add(String(toolInput.file_path));
   }
 
   const event = {

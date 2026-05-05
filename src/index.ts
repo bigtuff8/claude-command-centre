@@ -7,6 +7,7 @@ import { killAllSessions } from './services/sdk-session';
 import { initPersistence, loadState, stopPersistence } from './state/persistence';
 import { initPortfolioCache, stopPortfolioCache } from './portfolio/cache';
 import { PortfolioConfig } from './portfolio/types';
+import { initLedger } from './harness/ledger';
 
 const config = loadConfig();
 const { httpServer, io } = createApp(config);
@@ -14,6 +15,10 @@ const { httpServer, io } = createApp(config);
 // Initialise persistence (auto-save interval, data directory)
 const projectRoot = path.resolve(__dirname, '..');
 initPersistence(projectRoot);
+
+// Initialise harness event ledger
+const dataDir = path.join(projectRoot, 'data');
+initLedger(dataDir);
 
 // Restore sessions from previous run
 loadState();

@@ -68,6 +68,7 @@ export function loadState(): number {
           lastActivity: new Date(s.lastActivity),
           toolCount: s.toolCount || 0,
           filesModified: new Set(s.filesModified || []),
+          filesReadThisSession: new Set(), // Reset on restore — reads must happen fresh each session
           events: (s.events || []).map((e: any) => ({
             ...e,
             timestamp: new Date(e.timestamp),
@@ -77,6 +78,7 @@ export function loadState(): number {
           terminalPid: null, // stale after restart
           usage: s.usage || { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, totalCostUSD: 0, model: null, lastUpdated: null },
           autoApprove: s.autoApprove ?? null,
+          harnessPhase: s.harnessPhase || null,
         };
 
         // Convert usage.lastUpdated string back to Date
@@ -129,6 +131,7 @@ export function saveState(): void {
       lastUpdated: s.usage.lastUpdated instanceof Date ? s.usage.lastUpdated.toISOString() : s.usage.lastUpdated,
     },
     autoApprove: s.autoApprove,
+    harnessPhase: s.harnessPhase,
   }));
 
   const state = {

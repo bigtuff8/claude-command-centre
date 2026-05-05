@@ -22,12 +22,14 @@ export interface Session {
   lastActivity: Date;
   toolCount: number;
   filesModified: Set<string>;
+  filesReadThisSession: Set<string>;
   events: HookEvent[];
   pendingPermission: PendingPermission | null;
   transcriptPath: string | null;
   terminalPid: number | null;
   usage: SessionUsage;
   autoApprove: boolean | null;
+  harnessPhase: string | null;
 }
 
 export interface HookEvent {
