@@ -406,6 +406,93 @@ test.describe('Harness Ledger', () => {
   });
 });
 
+test.describe('Harness Orchestrator — Phase Prompt & Transition', () => {
+  test('should generate a phase prompt for the current phase', async () => {
+    const result = await apiGet(
+      `phase-prompt/${encodeURIComponent(TEMP_PROJECT)}?phase=design`
+    );
+
+    expect(result.phase).toBe('design');
+    expect(result.prompt).toContain('design');
+    expect(result.prompt).toContain('MANDATORY FIRST ACTIONS');
+    expect(result.prompt).toContain('agents/designer.md');
+    expect(result.prompt).toContain('ENFORCEMENT NOTICE');
+  });
+
+  test('should report transition readiness', async () => {
+    const result = await apiGet(
+      `transition-ready/${encodeURIComponent(TEMP_PROJECT)}`
+    );
+
+    // We're in design phase — need checkpoint-design.json to transition
+    expect(result.nextPhase).toBe('dev');
+    // May or may not be ready depending on checkpoint state
+    expect(typeof result.ready).toBe('boolean');
+    expect(Array.isArray(result.errors)).toBe(true);
+  });
+
+  test('should provide harness summary', async () => {
+    const result = await apiGet(
+      `summary/${encodeURIComponent(TEMP_PROJECT)}`
+    );
+
+    expect(result.project).toBe('Harness Test Project');
+    expect(result.harness).toBe('build');
+    expect(result.mode).toBe('airedale');
+    expect(result.phaseSequence).toEqual(['init', 'design', 'dev', 'test', 'release']);
+    expect(result.completedPhases).toContain('init');
+    expect(typeof result.reworkCycles).toBe('number');
+    expect(typeof result.overrideCount).toBe('number');
+  });
+
+  test('should execute transition when checkpoint is valid', async () => {
+    // Create design checkpoint so transition from design -> dev can proceed
+    fs.writeFileSync(path.join(TEMP_PROJECT, 'design-spec.md'), '# Design Spec\nTest design');
+    fs.mkdirSync(path.join(TEMP_PROJECT, 'prototype'), { recursive: true });
+    fs.writeFileSync(path.join(TEMP_PROJECT, 'prototype', 'index.html'), '<html>Prototype</html>');
+
+    const designCheckpoint = {
+      checkpointPhase: 'design',
+      checkpointCompletedAt: new Date().toISOString(),
+      checkpointHarness: 'build',
+      checkpointMode: 'airedale',
+      checkpointAgentFile: 'agents/designer.md',
+      checkpointAgentFileReadConfirmed: true,
+      checkpointRequiredArtefacts: {
+        designSpec: { checkpointArtefactPath: 'design-spec.md', checkpointArtefactExists: true, checkpointArtefactHash: null },
+        prototype: { checkpointArtefactPath: 'prototype/index.html', checkpointArtefactExists: true, checkpointArtefactHash: null },
+        featureList: { checkpointArtefactPath: 'feature-list.json', checkpointArtefactExists: true, checkpointArtefactHash: null },
+      },
+      checkpointNextAgent: 'developer',
+      checkpointUserConfirmed: true,
+      checkpointDetail: { designIterations: 1, featuresDesigned: 1 },
+    };
+    fs.writeFileSync(
+      path.join(HARNESS_DIR, 'checkpoint-design.json'),
+      JSON.stringify(designCheckpoint, null, 2)
+    );
+
+    // Clear the design gate (governance requirement)
+    await apiPost('gate/clear', {
+      projectPath: TEMP_PROJECT,
+      gateName: 'designGate',
+      sessionId: TEST_SESSION_ID,
+    });
+
+    const result = await apiPost('transition', {
+      projectPath: TEMP_PROJECT,
+      sessionId: TEST_SESSION_ID,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.nextPhase).toBe('dev');
+    expect(result.prompt).toContain('dev');
+    expect(result.prompt).toContain('MANDATORY FIRST ACTIONS');
+    expect(result.prompt).toContain('agents/developer.md');
+    expect(result.prompt).toContain('design-spec.md');
+  });
+});
+
 test.describe('Harness Enforcement — No Harness Active', () => {
   test('should not enforce anything for projects without a harness', async () => {
     const noHarnessProject = path.join(os.tmpdir(), `no-harness-${Date.now()}`);

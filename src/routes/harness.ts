@@ -16,6 +16,7 @@ import { validateCheckpoint } from '../harness/checkpoints';
 import { getRequiredReads } from '../harness/rules';
 import { readLedgerEvents, readProjectsSnapshot } from '../harness/ledger';
 import { HarnessType, HarnessMode, HarnessPhase, HARNESS_PHASE_SEQUENCES } from '../harness/types';
+import { isPhaseTransitionReady, executePhaseTransition, buildPhasePrompt, getHarnessSummary } from '../harness/orchestrator';
 
 let broadcastFn: (event: string, data: any) => void;
 
@@ -33,6 +34,10 @@ export function createHarnessRouter(broadcast: (event: string, data: any) => voi
   router.get('/ledger', handleGetLedger);
   router.get('/projects', handleGetProjects);
   router.get('/validate/:projectPath(*)', handleValidate);
+  router.get('/summary/:projectPath(*)', handleGetSummary);
+  router.get('/transition-ready/:projectPath(*)', handleTransitionReady);
+  router.post('/transition', handleTransition);
+  router.get('/phase-prompt/:projectPath(*)', handleGetPhasePrompt);
 
   return router;
 }
@@ -237,4 +242,77 @@ function handleValidate(req: Request, res: Response): void {
     valid: errors.length === 0,
     errors,
   });
+}
+
+function handleGetSummary(req: Request, res: Response): void {
+  const projectPath = decodeURIComponent(req.params.projectPath);
+  const state = loadHarnessState(projectPath);
+
+  if (!state) {
+    res.status(404).json({ error: 'No harness active for this project' });
+    return;
+  }
+
+  res.json(getHarnessSummary(state));
+}
+
+function handleTransitionReady(req: Request, res: Response): void {
+  const projectPath = decodeURIComponent(req.params.projectPath);
+  const state = loadHarnessState(projectPath);
+
+  if (!state) {
+    res.status(404).json({ error: 'No harness active for this project' });
+    return;
+  }
+
+  const readiness = isPhaseTransitionReady(state);
+  res.json(readiness);
+}
+
+function handleTransition(req: Request, res: Response): void {
+  const { projectPath, sessionId } = req.body;
+  const state = loadHarnessState(projectPath);
+
+  if (!state) {
+    res.status(404).json({ error: 'No harness active for this project' });
+    return;
+  }
+
+  const result = executePhaseTransition(state, sessionId || null);
+
+  if (!result.success) {
+    res.status(400).json({ ok: false, errors: result.errors });
+    return;
+  }
+
+  broadcastFn('harness-phase-transition', {
+    projectPath,
+    nextPhase: result.nextPhase,
+    promptLength: result.prompt?.length || 0,
+  });
+
+  res.json({
+    ok: true,
+    nextPhase: result.nextPhase,
+    prompt: result.prompt,
+  });
+}
+
+function handleGetPhasePrompt(req: Request, res: Response): void {
+  const projectPath = decodeURIComponent(req.params.projectPath);
+  const phase = req.query.phase as string;
+  const state = loadHarnessState(projectPath);
+
+  if (!state) {
+    res.status(404).json({ error: 'No harness active for this project' });
+    return;
+  }
+
+  if (!phase) {
+    res.status(400).json({ error: 'phase query parameter required' });
+    return;
+  }
+
+  const prompt = buildPhasePrompt(state, phase as HarnessPhase);
+  res.json({ phase, prompt });
 }
