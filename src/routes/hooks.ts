@@ -148,14 +148,23 @@ async function handlePreToolUse(req: Request, res: Response): Promise<void> {
     }
   }
 
-  // Auto-pass tools that don't need permission prompting
+  // Auto-pass tools: always allow with explicit permission decision.
+  // Returning {} (no decision) causes Claude Code to fall back to its own
+  // permission system, which may still prompt the user for tools like
+  // WebSearch/WebFetch. An explicit 'allow' overrides that.
   if (isAutoPassTool(toolName, session.permissionMode)) {
     // Track file reads for harness mustReadBefore enforcement
     if (toolName === 'Read' && toolInput.file_path) {
       session.filesReadThisSession.add(String(toolInput.file_path));
     }
     broadcastFn('session-updated', sessionToDTO(session));
-    res.json({});
+    res.json({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'allow',
+        permissionDecisionReason: 'Auto-pass tool — always allowed',
+      },
+    });
     return;
   }
 

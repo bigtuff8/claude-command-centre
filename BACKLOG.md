@@ -1,6 +1,6 @@
 # Command Centre — Product Backlog
 
-**Last Updated:** 2026-04-24
+**Last Updated:** 2026-05-13
 **Referenced by:** feature-list.json, progress.txt
 
 ---
@@ -142,6 +142,13 @@ Built 2026-04-18-19. Portfolio dashboard merged as landing page.
 4. **Health score 32%** — Reflects real state but coarse. Many projects missing data dictionaries is expected, not a crisis.
 5. **Risk register empty** — Template file with placeholder rows. Risks will populate as SteerCo Companion is used.
 6. **Portfolio tests not written** — No Playwright coverage for portfolio tabs yet.
+
+## Resolved Issues
+
+| Date | Issue | Fix |
+|------|-------|-----|
+| 2026-05-13 | Portfolio "New Session" button (top metrics bar) did nothing — only switched tab, didn't open modal | `portfolio.js`: After `switchTab('sessions')`, now calls `iframe.contentWindow.openNewSession()` |
+| 2026-05-13 | Auto-approve leaked for WebSearch/WebFetch — `autoPassTools` returned `{}` (no decision), Claude Code fell back to its own prompting | `hooks.ts`: autoPassTools path now returns explicit `permissionDecision: 'allow'` instead of empty `{}` |
 
 ---
 

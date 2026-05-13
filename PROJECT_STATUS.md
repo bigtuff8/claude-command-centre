@@ -1,7 +1,7 @@
 # Command Centre
 
 **Status:** Active
-**Last Active:** 2026-05-05
+**Last Active:** 2026-05-13
 **Quick Context:** Web dashboard for monitoring Claude Code sessions AND managing the full project portfolio — sessions, projects, risks, activity, audit. Windows-native, portable, shareable.
 
 ## Current State
@@ -16,7 +16,7 @@
 - **Harness enforcement:** 4-layer engine (checkpoints, state machine, PreToolUse enforcement, phase orchestrator)
 - **Tests:** 33 Playwright E2E tests (sessions) + 25 harness enforcement tests = 58 total
 - **Persistence:** Sessions via `data/state.json`, portfolio via in-memory cache with 60s file-scan refresh, harness via `data/harness-ledger.jsonl`
-- **Auto-approve:** ON — global + per-session toggles (harness enforcement runs BEFORE auto-approve)
+- **Auto-approve:** ON — global + per-session toggles (harness enforcement runs BEFORE auto-approve). All tools including autoPassTools now return explicit `allow` decisions.
 
 ### Landing Page — Portfolio Dashboard
 
@@ -44,7 +44,7 @@ Global permission bar visible on all tabs. Consistent filter row frame across al
 - Update log written to `data/update.log`
 - Phase 2 (backlog): scheduled task for periodic checks, multi-device setup script
 
-### Harness Enforcement Engine (New — v0.4.0)
+### Harness Enforcement Engine (v0.4.0)
 
 4-layer enforcement engine that prevents Claude from skipping harness steps:
 
@@ -57,6 +57,17 @@ API endpoints: `/api/harness/status`, `/create`, `/advance`, `/transition`, `/ov
 
 All 7 agent prompts updated with mandatory checkpoint writing sections.
 
+### Launcher → Enforcement Wiring (2026-05-08)
+
+The enforcement engine was built (v0.4.0) but had no activation path — the launcher injected harness prompts via `--append-system-prompt` but never created the `.harness/harness-state.json` that the engine reads on every PreToolUse hook. Without that file, `loadHarnessState()` returns null and enforcement is silently skipped.
+
+**Fix applied to the launcher** (not this repo — changes are in `claude-workspace/launcher/`):
+- `command-centre.ts`: Added `initHarnessEnforcement()` — calls `GET /api/harness/status/:path` to check for existing harness, then `POST /api/harness/create` if needed
+- `harness.ts`: Added `mode` field to `HarnessSelection` interface
+- `launcher.ts`: Wired `initHarnessEnforcement()` into `launchClaude()` after MCP config, before session spawn
+
+**How it works now:** Launcher selects harness → calls Command Centre API → `.harness/harness-state.json` created in project dir → every subsequent PreToolUse hook from that session hits enforcement checks.
+
 ### What's Partial / Known Issues
 
 - **Data source:** Portfolio data comes from parsing markdown files every 60s — fragile, not a reliable source of truth for activity freshness. Harness ledger provides structured data for harness-managed projects.
@@ -65,15 +76,17 @@ All 7 agent prompts updated with mandatory checkpoint writing sections.
 - **B006** — Hold/resume UI limited value (claude -p is one-shot)
 - **Portfolio tests** — No Playwright tests yet for portfolio tabs
 - **Harness dashboard UI** — No visual panel for harness control yet (API-only). Phase 2.
+- **PostToolUse checkpoint detection** — No auto-detection when Claude writes `.harness/checkpoint-*.json`. Phase transitions currently require manual API calls or dashboard action (once dashboard UI exists).
 - **Portfolio config:** Was using wrong username in fallback paths. Fixed to use `config.json` with correct paths.
 
 ## Next Steps
 
 1. **Harness dashboard UI** — Visual panel in Command Centre for harness control (phase progress, file read tracking, override buttons, gate UI)
-2. **Portfolio Database Layer (P-DB)** — SQLite database as source of truth for portfolio data. Harness ledger already provides structured data for harness-managed projects.
-3. Portfolio Playwright E2E tests (P-TEST)
-4. B016 — Mobile push notifications (scope decision pending)
-5. B018 Phase 2 — Scheduled auto-update checks, multi-device setup script
+2. **PostToolUse checkpoint detection** — Auto-detect writes to `.harness/checkpoint-*.json` in `handlePostToolUse`, trigger server-side validation, broadcast `harness-phase-complete` or `harness-gate-pending` to dashboard
+3. **Portfolio Database Layer (P-DB)** — SQLite database as source of truth for portfolio data. Harness ledger already provides structured data for harness-managed projects.
+4. Portfolio Playwright E2E tests (P-TEST)
+5. B016 — Mobile push notifications (scope decision pending)
+6. B018 Phase 2 — Scheduled auto-update checks, multi-device setup script
 
 ## How to Resume
 
@@ -129,3 +142,5 @@ All 7 agent prompts updated with mandatory checkpoint writing sections.
 | 2026-04-18-19 | Portfolio extension. Full build harness run: design (4 iterations, 3 directions combined), build (21 features — parsers, scanner, cache, API, 5-tab frontend with glassmorphism/aurora/heat trails/decay), merge as landing page. 50 projects discovered. Health score 32%. |
 | 2026-04-24 | B018 Phase 1: Pushed 8 unpushed commits to GitHub. Created auto-update script (`scripts/auto-update.js`) — git pull, conditional npm install, rebuild, server restart. Integrated into boot startup (auto-update runs before watchdog on login). Added `npm run update` and `npm run update:start` scripts. Configured git identity on desktop. Updated all project docs. |
 | 2026-05-05 | **Harness Enforcement Engine (v0.4.0).** Root cause analysis of harness non-compliance. Designed 4-layer enforcement (SteerCo review: 8 sections, 3 amendments, all approved). Built Layers 1-3 (checkpoints, state machine, PreToolUse enforcement, ledger) + Layer 4 (orchestrator). Updated all 7 agent prompts with checkpoint writing. 25 Playwright tests passing. Fixed portfolio config (wrong username in fallback paths). Two commits pushed to GitHub. |
+| 2026-05-08 | **Launcher → Enforcement Wiring.** Identified activation gap: enforcement engine was built but the launcher never called `POST /api/harness/create` to create `.harness/harness-state.json`, so enforcement was silently skipped for all sessions. Fix applied in the launcher repo (`claude-workspace/launcher/`): `initHarnessEnforcement()` added to `command-centre.ts`, `mode` added to `HarnessSelection`, wired into `launchClaude()`. Verified end-to-end: API creates state file, status endpoint detects it, enforcement hooks read it. No changes to Command Centre code — fix was entirely in the launcher's integration layer. |
+| 2026-05-13 | **Bug fixes.** (1) Portfolio "New Session" button (top metrics bar) only switched to Sessions tab but never opened the modal — fixed to call `openNewSession()` inside the sessions iframe. (2) Auto-approve leaking: `autoPassTools` (Read, Glob, Grep, WebSearch, WebFetch) returned empty `{}` response instead of explicit `allow` decision, causing Claude Code to fall back to its own permission prompting for WebSearch/WebFetch. Fixed to return `permissionDecision: 'allow'` for all auto-pass tools. |

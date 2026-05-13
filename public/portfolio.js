@@ -1692,6 +1692,22 @@ function setupEventListeners() {
   if (newSessionBtn) {
     newSessionBtn.addEventListener('click', function () {
       switchTab('sessions');
+      // Wait for iframe to be ready then open the new session modal inside it
+      var iframe = document.getElementById('sessionsIframe');
+      if (iframe && iframe.contentWindow) {
+        var tryOpen = function () {
+          if (typeof iframe.contentWindow.openNewSession === 'function') {
+            iframe.contentWindow.openNewSession();
+          } else {
+            iframe.addEventListener('load', function () {
+              if (typeof iframe.contentWindow.openNewSession === 'function') {
+                iframe.contentWindow.openNewSession();
+              }
+            }, { once: true });
+          }
+        };
+        tryOpen();
+      }
     });
   }
 
