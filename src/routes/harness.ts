@@ -1,6 +1,7 @@
 // Harness Enforcement Engine — REST API Routes
 // Dashboard endpoints for harness status, phase control, and overrides
 
+import * as path from 'path';
 import { Router, Request, Response } from 'express';
 import {
   loadHarnessState,
@@ -14,9 +15,17 @@ import {
 } from '../harness/state';
 import { validateCheckpoint } from '../harness/checkpoints';
 import { getRequiredReads } from '../harness/rules';
-import { readLedgerEvents, readProjectsSnapshot } from '../harness/ledger';
-import { HarnessType, HarnessMode, HarnessPhase, HARNESS_PHASE_SEQUENCES } from '../harness/types';
-import { isPhaseTransitionReady, executePhaseTransition, buildPhasePrompt, getHarnessSummary } from '../harness/orchestrator';
+import { appendLedgerEvent, readLedgerEvents, readProjectsSnapshot, readProjectEventLog, getMetrics, computeSuccessCriteria } from '../harness/ledger';
+import { HarnessType, HarnessMode, HarnessPhase, HarnessState, HARNESS_PHASE_SEQUENCES } from '../harness/types';
+import { isPhaseTransitionReady, executePhaseTransition, buildPhasePrompt, getHarnessSummary, spawnPhaseSession } from '../harness/orchestrator';
+
+/**
+ * Extract workFolder from request query params or body.
+ * Dashboard API calls should include ?workFolder=xxx for work-folder-scoped harnesses.
+ */
+function extractWorkFolder(req: Request): string | null {
+  return (req.query.workFolder as string) || req.body?.workFolder || null;
+}
 
 let broadcastFn: (event: string, data: any) => void;
 
@@ -38,13 +47,17 @@ export function createHarnessRouter(broadcast: (event: string, data: any) => voi
   router.get('/transition-ready/:projectPath(*)', handleTransitionReady);
   router.post('/transition', handleTransition);
   router.get('/phase-prompt/:projectPath(*)', handleGetPhasePrompt);
+  router.post('/gate/feedback', handleGateFeedback);
+  router.get('/metrics', handleGetMetrics);
+  router.get('/success-criteria', handleGetSuccessCriteria);
+  router.get('/project-events/:projectPath(*)', handleGetProjectEvents);
 
   return router;
 }
 
 function handleGetStatus(req: Request, res: Response): void {
   const projectPath = decodeURIComponent(req.params.projectPath);
-  const state = loadHarnessState(projectPath);
+  const state = loadHarnessState(projectPath, extractWorkFolder(req));
 
   if (!state) {
     res.json({ active: false });
@@ -68,7 +81,7 @@ function handleGetStatus(req: Request, res: Response): void {
 }
 
 function handleCreate(req: Request, res: Response): void {
-  const { projectPath, projectName, harnessType, mode } = req.body;
+  const { projectPath, projectName, harnessType, mode, workFolder, brief } = req.body;
 
   if (!projectPath || !projectName || !harnessType || !mode) {
     res.status(400).json({ error: 'projectPath, projectName, harnessType, and mode are required' });
@@ -84,16 +97,18 @@ function handleCreate(req: Request, res: Response): void {
     projectPath,
     projectName,
     harnessType as HarnessType,
-    mode as HarnessMode
+    mode as HarnessMode,
+    workFolder || null,
+    brief || ''
   );
 
-  broadcastFn('harness-created', { projectPath, harnessType, mode });
+  broadcastFn('harness-created', { projectPath, harnessType, mode, workFolder });
   res.json({ ok: true, state });
 }
 
 function handleAdvance(req: Request, res: Response): void {
   const { projectPath, sessionId } = req.body;
-  const state = loadHarnessState(projectPath);
+  const state = loadHarnessState(projectPath, extractWorkFolder(req));
 
   if (!state) {
     res.status(404).json({ error: 'No harness active for this project' });
@@ -117,7 +132,7 @@ function handleAdvance(req: Request, res: Response): void {
 
 function handleRework(req: Request, res: Response): void {
   const { projectPath, sessionId } = req.body;
-  const state = loadHarnessState(projectPath);
+  const state = loadHarnessState(projectPath, extractWorkFolder(req));
 
   if (!state) {
     res.status(404).json({ error: 'No harness active for this project' });
@@ -144,7 +159,7 @@ function handleRework(req: Request, res: Response): void {
 
 function handleOverride(req: Request, res: Response): void {
   const { projectPath, overrideType, rule, phase, sessionId, reason } = req.body;
-  const state = loadHarnessState(projectPath);
+  const state = loadHarnessState(projectPath, extractWorkFolder(req));
 
   if (!state) {
     res.status(404).json({ error: 'No harness active for this project' });
@@ -190,7 +205,7 @@ function handleOverride(req: Request, res: Response): void {
 
 function handlePause(req: Request, res: Response): void {
   const { projectPath, paused } = req.body;
-  const state = loadHarnessState(projectPath);
+  const state = loadHarnessState(projectPath, extractWorkFolder(req));
 
   if (!state) {
     res.status(404).json({ error: 'No harness active for this project' });
@@ -205,7 +220,7 @@ function handlePause(req: Request, res: Response): void {
 
 function handleClearGate(req: Request, res: Response): void {
   const { projectPath, gateName, sessionId } = req.body;
-  const state = loadHarnessState(projectPath);
+  const state = loadHarnessState(projectPath, extractWorkFolder(req));
 
   if (!state) {
     res.status(404).json({ error: 'No harness active for this project' });
@@ -237,7 +252,13 @@ function handleValidate(req: Request, res: Response): void {
     return;
   }
 
-  const errors = validateCheckpoint(projectPath, phase as HarnessPhase);
+  const state = loadHarnessState(projectPath, extractWorkFolder(req));
+  if (!state) {
+    res.status(404).json({ error: 'No harness state found for project' });
+    return;
+  }
+
+  const errors = validateCheckpoint(state, phase as HarnessPhase);
   res.json({
     valid: errors.length === 0,
     errors,
@@ -246,7 +267,7 @@ function handleValidate(req: Request, res: Response): void {
 
 function handleGetSummary(req: Request, res: Response): void {
   const projectPath = decodeURIComponent(req.params.projectPath);
-  const state = loadHarnessState(projectPath);
+  const state = loadHarnessState(projectPath, extractWorkFolder(req));
 
   if (!state) {
     res.status(404).json({ error: 'No harness active for this project' });
@@ -258,7 +279,7 @@ function handleGetSummary(req: Request, res: Response): void {
 
 function handleTransitionReady(req: Request, res: Response): void {
   const projectPath = decodeURIComponent(req.params.projectPath);
-  const state = loadHarnessState(projectPath);
+  const state = loadHarnessState(projectPath, extractWorkFolder(req));
 
   if (!state) {
     res.status(404).json({ error: 'No harness active for this project' });
@@ -271,7 +292,7 @@ function handleTransitionReady(req: Request, res: Response): void {
 
 function handleTransition(req: Request, res: Response): void {
   const { projectPath, sessionId } = req.body;
-  const state = loadHarnessState(projectPath);
+  const state = loadHarnessState(projectPath, extractWorkFolder(req));
 
   if (!state) {
     res.status(404).json({ error: 'No harness active for this project' });
@@ -301,7 +322,7 @@ function handleTransition(req: Request, res: Response): void {
 function handleGetPhasePrompt(req: Request, res: Response): void {
   const projectPath = decodeURIComponent(req.params.projectPath);
   const phase = req.query.phase as string;
-  const state = loadHarnessState(projectPath);
+  const state = loadHarnessState(projectPath, extractWorkFolder(req));
 
   if (!state) {
     res.status(404).json({ error: 'No harness active for this project' });
@@ -315,4 +336,180 @@ function handleGetPhasePrompt(req: Request, res: Response): void {
 
   const prompt = buildPhasePrompt(state, phase as HarnessPhase);
   res.json({ phase, prompt });
+}
+
+/** F013: Get current enforcement metrics. */
+function handleGetMetrics(_req: Request, res: Response): void {
+  res.json(getMetrics());
+}
+
+/** F014: Get computed success criteria. */
+function handleGetSuccessCriteria(_req: Request, res: Response): void {
+  res.json(computeSuccessCriteria());
+}
+
+/** Wave 3: Get per-project event log (cross-machine source of truth). */
+function handleGetProjectEvents(req: Request, res: Response): void {
+  const projectPath = decodeURIComponent(req.params.projectPath);
+  const events = readProjectEventLog(projectPath);
+  res.json(events);
+}
+
+/**
+ * F006: Receive gate feedback from interactive HTML review documents.
+ * The review HTML POSTs structured JSON here on submit.
+ * On all-approved, triggers phase transition and session launch.
+ */
+function handleGateFeedback(req: Request, res: Response): void {
+  const feedback = req.body;
+
+  if (!feedback || !feedback.sections) {
+    res.status(400).json({ error: 'Invalid feedback: sections required' });
+    return;
+  }
+
+  // Find the project's harness state — prefer explicit projectPath + workFolder
+  let projectPath: string | null = feedback.projectPath || null;
+  const workFolder: string | null = feedback.workFolder || null;
+  let state: HarnessState | null = null;
+
+  if (projectPath) {
+    state = loadHarnessState(projectPath, workFolder);
+  }
+
+  if (!state && feedback.project) {
+    const projectName = feedback.project;
+    const home = process.env.HOME || process.env.USERPROFILE || '';
+    const candidates = [
+      path.join(home, 'OneDrive - Airedale Catering Equipment', 'Projects', 'Work', projectName),
+      path.join(home, 'OneDrive - Airedale Catering Equipment', 'Projects', projectName),
+      path.join(home, 'OneDrive', 'Projects', 'Personal', projectName),
+      path.join(home, 'Projects', projectName),
+      path.join(home, 'OneDrive - Airedale Catering Equipment', 'Projects', 'Work', 'Claude Agents', projectName),
+    ];
+
+    for (const candidate of candidates) {
+      state = loadHarnessState(candidate, workFolder);
+      if (state) {
+        projectPath = candidate;
+        break;
+      }
+    }
+  }
+
+  const projectLabel = feedback.project || projectPath || 'unknown';
+
+  if (!state || !projectPath) {
+    res.status(404).json({ error: `No harness found for project: ${projectLabel}` });
+    return;
+  }
+
+  // Tally decisions
+  const sections = feedback.sections as Record<string, { decision: string; comment?: string }>;
+  const decisions = Object.values(sections);
+  const approved = decisions.filter((d) => d.decision === 'approve').length;
+  const amended = decisions.filter((d) => d.decision === 'amend').length;
+  const rejected = decisions.filter((d) => d.decision === 'reject').length;
+  const total = decisions.length;
+  const allApproved = approved === total && total > 0;
+
+  console.log(`[Gate] Feedback for ${projectLabel}: ${approved}/${total} approved, ${amended} amended, ${rejected} rejected`);
+
+  // Log the gate event
+  const gateName = feedback.reviewType === 'design-gate' ? 'designGate' : 'preDeployment';
+
+  appendLedgerEvent({
+    ledgerEventType: allApproved ? 'gate_cleared' : 'gate_pending',
+    ledgerTimestamp: new Date().toISOString(),
+    ledgerProjectPath: state.harnessProjectPath,
+    ledgerProjectName: state.harnessProject,
+    ledgerWorkFolder: state.harnessWorkFolder,
+    ledgerHarness: state.harnessType,
+    ledgerMode: state.harnessMode,
+    ledgerPhase: state.harnessCurrentPhase,
+    ledgerSessionId: null,
+    ledgerDetail: {
+      gateType: gateName,
+      decision: allApproved ? 'approved' : 'needs-work',
+      approved,
+      amended,
+      rejected,
+      total,
+      amendments: Object.entries(sections)
+        .filter(([, v]) => v.decision === 'amend' && v.comment)
+        .map(([k, v]) => ({ section: k, comment: v.comment })),
+    },
+  });
+
+  if (allApproved) {
+    // Clear the gate and attempt phase transition
+    clearGate(state, gateName, null);
+
+    broadcastFn('gate-approved', {
+      projectPath,
+      gateName,
+      approved,
+      total,
+    });
+
+    // Try to advance to next phase and spawn session
+    const result = executePhaseTransition(state, null);
+    if (result.success && result.nextPhase) {
+      broadcastFn('harness-phase-transition', {
+        projectPath,
+        nextPhase: result.nextPhase,
+        promptLength: result.prompt?.length || 0,
+      });
+
+      // F004: Spawn the next phase session after manual gate approval
+      const freshState = loadHarnessState(projectPath!, workFolder);
+      if (freshState) {
+        spawnPhaseSession(freshState, result.nextPhase).then((spawnResult) => {
+          if (spawnResult.success) {
+            console.log(`[Gate] Spawned ${result.nextPhase} session (PID ${spawnResult.pid})`);
+          } else {
+            console.error(`[Gate] FAILED to spawn ${result.nextPhase}: ${spawnResult.error}`);
+            broadcastFn('phase-session-failed', {
+              projectPath,
+              phase: result.nextPhase,
+              error: spawnResult.error,
+            });
+          }
+        }).catch((err) => {
+          console.error(`[Gate] Session spawn error after approval: ${err}`);
+          broadcastFn('phase-session-failed', {
+            projectPath,
+            phase: result.nextPhase,
+            error: String(err),
+          });
+        });
+      }
+    }
+
+    res.json({
+      ok: true,
+      decision: 'approved',
+      advanced: result.success,
+      nextPhase: result.nextPhase || null,
+    });
+  } else {
+    broadcastFn('gate-feedback', {
+      projectPath,
+      gateName,
+      decision: 'needs-work',
+      approved,
+      amended,
+      rejected,
+      total,
+    });
+
+    res.json({
+      ok: true,
+      decision: 'needs-work',
+      approved,
+      amended,
+      rejected,
+      total,
+    });
+  }
 }

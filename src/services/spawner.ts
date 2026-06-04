@@ -1,21 +1,19 @@
-import { exec, spawn } from 'child_process';
+// Session Spawner — delegates to shared session-spawn utility
+// Retained as a thin wrapper for backward compatibility with existing callers.
+
+import { spawnHappySession, SpawnOptions } from './session-spawn';
 import { join } from 'path';
-import { writeFileSync, existsSync } from 'fs';
-import { tmpdir } from 'os';
-import { registerTerminal } from '../state/sessions';
-import { findWindowByTitle } from './focus';
+import { existsSync } from 'fs';
 import { loadConfig } from '../config';
 
-// B002: Resolve launcher path — config > env > common locations > error
-function getLauncherCommand(): string {
+// B002: Resolve launcher path (retained for "Open Launcher" button)
+export function getLauncherCommand(): string {
   const config = loadConfig();
 
-  // 1. Explicit config path
   if (config.launcherPath) {
     return `node "${config.launcherPath}"`;
   }
 
-  // 2. Environment variable
   const workspacePath = process.env.CLAUDE_WORKSPACE;
   if (workspacePath) {
     const envPath = join(workspacePath, 'launcher', 'dist', 'index.js');
@@ -24,77 +22,30 @@ function getLauncherCommand(): string {
     }
   }
 
-  // 3. Global npm install (where the launcher actually lives)
   const npmGlobalPath = join(process.env.APPDATA || '', 'npm', 'node_modules', 'claude-launcher', 'dist', 'index.js');
   if (existsSync(npmGlobalPath)) {
     return `node "${npmGlobalPath}"`;
   }
 
-  // 4. Fallback — assume 'claude' is on PATH (opens CLI directly, not launcher)
   console.warn('[Spawner] Could not find launcher — falling back to claude CLI');
   return 'claude';
 }
 
-export function spawnSession(projectDir: string, name?: string, prompt?: string, viaLauncher?: boolean): void {
-  const isWindows = process.platform === 'win32';
-  const isMac = process.platform === 'darwin';
+/**
+ * Spawn a session via the shared utility (Happy Coder aware).
+ * Replaces the old exec('start ...') approach that destabilised CC.
+ */
+export async function spawnSession(
+  projectDir: string,
+  name?: string,
+  prompt?: string,
+  broadcast?: (event: string, data: any) => void
+): Promise<void> {
+  const options: SpawnOptions = {
+    projectPath: projectDir || process.cwd(),
+    displayName: name || projectDir.replace(/.*[\\/]/, '') || 'Session',
+    initialMessage: prompt,
+  };
 
-  let fullCmd: string;
-  let cwd: string;
-
-  if (viaLauncher) {
-    fullCmd = getLauncherCommand();
-    cwd = projectDir || process.cwd();
-  } else {
-    let claudeCmd = 'claude';
-    const args: string[] = [];
-    if (name) { args.push('--name', name); }
-    if (prompt) { args.push(prompt); }
-    fullCmd = [claudeCmd, ...args].join(' ');
-    cwd = projectDir;
-  }
-
-  if (isWindows) {
-    // Write a temporary .bat file to avoid all quoting hell with nested cmd /c /k start.
-    // The bat sets the window title and runs the command in the correct directory.
-    const windowTitle = `CC: ${name || cwd.replace(/.*[\\/]/, '') || 'Session'}`;
-    const batPath = join(tmpdir(), `cc-launch-${Date.now()}.bat`);
-    const batContent = [
-      '@echo off',
-      `title ${windowTitle}`,
-      `cd /d "${cwd}"`,
-      fullCmd,
-      `del "${batPath}"`,  // self-cleanup
-    ].join('\r\n');
-
-    writeFileSync(batPath, batContent, 'utf-8');
-    console.log(`[Spawner] Wrote launch script: ${batPath}`);
-    console.log(`[Spawner] Command: ${fullCmd}`);
-    console.log(`[Spawner] CWD: ${cwd}`);
-
-    exec(`start "CC-Launch" "${batPath}"`, {
-      windowsHide: false,
-    });
-
-    // After the window opens, find it by its CC: title and register the PID
-    setTimeout(() => {
-      findWindowByTitle(windowTitle).then(pid => {
-        if (pid) {
-          registerTerminal(cwd, pid);
-          console.log(`[Spawner] Registered terminal PID ${pid} for ${cwd}`);
-        }
-      });
-    }, 2000);
-  } else if (isMac) {
-    const script = `tell application "Terminal" to do script "cd '${cwd}' && ${fullCmd}"`;
-    spawn('osascript', ['-e', script], {
-      detached: true,
-      stdio: 'ignore',
-    }).unref();
-  } else {
-    spawn('x-terminal-emulator', ['-e', `bash -c 'cd "${cwd}" && ${fullCmd}'`], {
-      detached: true,
-      stdio: 'ignore',
-    }).unref();
-  }
+  await spawnHappySession(options, broadcast);
 }

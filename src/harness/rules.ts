@@ -10,8 +10,10 @@ import {
   HarnessType,
   RuleViolation,
   PHASE_AGENT_FILES,
+  HARNESS_PHASE_SEQUENCES,
 } from './types';
 import { isPreviousCheckpointValid } from './checkpoints';
+import { getArtefactBasePath } from './state';
 
 /**
  * Normalise a file path to a suffix for matching.
@@ -66,7 +68,7 @@ function bashCommandMatches(command: string, pattern: string): boolean {
 
 // ---- Rule definitions per harness type and phase ----
 
-function getPhaseRules(harnessType: HarnessType, phase: HarnessPhase, mode: string): HarnessRule[] {
+function getPhaseRules(harnessType: HarnessType, phase: HarnessPhase, mode: string, projectPath?: string): HarnessRule[] {
   const agentFile = PHASE_AGENT_FILES[phase] || '';
   const rules: HarnessRule[] = [];
 
@@ -77,6 +79,23 @@ function getPhaseRules(harnessType: HarnessType, phase: HarnessPhase, mode: stri
       ruleFile: agentFile,
       ruleBeforeTools: ['Write', 'Edit', 'Bash'],
     });
+  }
+
+  // F008: Must read handoff brief from previous phase (only if the file exists)
+  const sequence = HARNESS_PHASE_SEQUENCES[harnessType] || [];
+  const phaseIndex = sequence.indexOf(phase);
+  if (phaseIndex > 0 && projectPath) {
+    const previousPhase = sequence[phaseIndex - 1];
+    const handoffFile = `handoff-${previousPhase}.md`;
+    // DR-01: Use artefact base path (work folder aware) for handoff location
+    const handoffPath = path.join(projectPath, '.harness', handoffFile);
+    if (fs.existsSync(handoffPath)) {
+      rules.push({
+        ruleType: 'mustReadBefore',
+        ruleFile: handoffFile,
+        ruleBeforeTools: ['Write', 'Edit', 'Bash'],
+      });
+    }
   }
 
   switch (phase) {
@@ -158,6 +177,14 @@ function getPhaseRules(harnessType: HarnessType, phase: HarnessPhase, mode: stri
           ruleCondition: 'airedale',
         });
       }
+      // Code audit must be written before dev checkpoint.
+      // Enforces the Work/CLAUDE.md completion workflow: functions defined
+      // but never called, missing error handling, dead code, etc.
+      rules.push({
+        ruleType: 'requireArtefact',
+        ruleFile: 'code-audit.md',
+        ruleReason: 'Dev phase: code-audit.md must be written before creating the checkpoint. Run the mandatory code audit per Work/CLAUDE.md completion workflow.',
+      });
       break;
 
     case 'test':
@@ -190,6 +217,15 @@ function getPhaseRules(harnessType: HarnessType, phase: HarnessPhase, mode: stri
         ruleType: 'requireArtefact',
         ruleFile: 'test-report.md',
         ruleReason: 'Test phase: test-report.md must be written before creating the checkpoint.',
+      });
+      // Verification report: tester must trace every feature's verification
+      // steps from feature-list.json against the actual implementation.
+      // This catches the "built but not wired" gap — functions exist but
+      // aren't called, endpoints exist but aren't connected, etc.
+      rules.push({
+        ruleType: 'requireArtefact',
+        ruleFile: 'verification-report.md',
+        ruleReason: 'Test phase: verification-report.md must be written before creating the checkpoint. Walk through EVERY verification step in feature-list.json and confirm each passes against the actual code/running system.',
       });
       break;
 
@@ -229,20 +265,53 @@ function getPhaseRules(harnessType: HarnessType, phase: HarnessPhase, mode: stri
 /**
  * Check all phase rules against a tool call.
  * Returns a violation if any rule is broken, or null if all pass.
+ * @param artefactBase - Optional artefact base path (work folder aware).
+ *   If not provided, derived from state via getArtefactBasePath().
  */
 export function checkPhaseRules(
   state: HarnessState,
   toolName: string,
   toolInput: Record<string, any>,
-  filesReadThisSession: Set<string>
+  filesReadThisSession: Set<string>,
+  artefactBase?: string
 ): RuleViolation | null {
   // Harness paused — skip all enforcement
   if (state.harnessPaused) return null;
 
-  const rules = getPhaseRules(state.harnessType, state.harnessCurrentPhase, state.harnessMode);
+  const base = artefactBase || getArtefactBasePath(state);
+
+  // DR-06: Block writing artefact files to project root when a work folder is active.
+  // This catches the most common agent error: writing to CWD instead of the work folder.
+  if (state.harnessWorkFolder && (toolName === 'Write' || toolName === 'Edit')) {
+    const targetFile = toolInput.file_path ? String(toolInput.file_path) : '';
+    if (targetFile) {
+      const PROTECTED_ARTEFACTS = [
+        'feature-list.json', 'progress.txt', 'design-spec.md', 'design-research.md',
+        'code-audit.md', 'test-report.md', 'verification-report.md', 'release-notes.md',
+      ];
+      const normTarget = normalisePath(targetFile);
+      const normProjectRoot = normalisePath(state.harnessProjectPath);
+      for (const artefact of PROTECTED_ARTEFACTS) {
+        const projectRootArtefact = normProjectRoot + '/' + artefact;
+        if (normTarget.endsWith(projectRootArtefact) || normTarget === projectRootArtefact) {
+          // Check it's at project root, not in the work folder
+          const normBase = normalisePath(base);
+          if (!normTarget.includes(normBase + '/' + artefact)) {
+            return {
+              violationRule: `blockWrite:project-root-artefact`,
+              violationReason: `Work folder is active. "${artefact}" must be written to ${state.harnessWorkFolder}/${artefact}, not the project root.`,
+              violationFix: `Write to "${state.harnessWorkFolder}/${artefact}" instead of "${artefact}".`,
+            };
+          }
+        }
+      }
+    }
+  }
+
+  const rules = getPhaseRules(state.harnessType, state.harnessCurrentPhase, state.harnessMode, base);
 
   for (const rule of rules) {
-    const violation = evaluateRule(rule, state, toolName, toolInput, filesReadThisSession);
+    const violation = evaluateRule(rule, state, toolName, toolInput, filesReadThisSession, base);
     if (violation) return violation;
   }
 
@@ -251,14 +320,17 @@ export function checkPhaseRules(
 
 /**
  * Evaluate a single rule against a tool call.
+ * @param artefactBase - The artefact base path (work folder aware)
  */
 function evaluateRule(
   rule: HarnessRule,
   state: HarnessState,
   toolName: string,
   toolInput: Record<string, any>,
-  filesRead: Set<string>
+  filesRead: Set<string>,
+  artefactBase?: string
 ): RuleViolation | null {
+  const base = artefactBase || getArtefactBasePath(state);
   switch (rule.ruleType) {
     case 'mustReadBefore': {
       // Only enforced for the specified tools
@@ -283,7 +355,7 @@ function evaluateRule(
       // Only block non-Read tools
       if (['Read', 'Glob', 'Grep'].includes(toolName)) return null;
 
-      const result = isPreviousCheckpointValid(state.harnessProjectPath, state);
+      const result = isPreviousCheckpointValid(state);
       if (!result.valid) {
         return {
           violationRule: `requireCheckpoint:${rule.ruleCheckpoint}`,
@@ -291,6 +363,25 @@ function evaluateRule(
           violationFix: `Complete the previous phase and ensure ${rule.ruleCheckpoint} is valid.`,
         };
       }
+
+      // G022: Evaluate allPass condition — release phase requires all features passing
+      if (rule.ruleCondition === 'allPass') {
+        const featureListPath = path.join(base, 'feature-list.json');
+        try {
+          if (fs.existsSync(featureListPath)) {
+            const fl = JSON.parse(fs.readFileSync(featureListPath, 'utf-8'));
+            const failing = (fl.features || []).filter((f: any) => !f.passes);
+            if (failing.length > 0) {
+              return {
+                violationRule: `requireCheckpoint:allPass`,
+                violationReason: `Release phase requires all features passing. ${failing.length} feature(s) still failing: ${failing.map((f: any) => f.id).join(', ')}`,
+                violationFix: 'Update feature-list.json — all features must have passes: true before release.',
+              };
+            }
+          }
+        } catch { /* feature list parse error — let it through, checkpoint validation will catch it */ }
+      }
+
       return null;
     }
 
@@ -320,7 +411,7 @@ function evaluateRule(
 
       // For git push in release, also check test-report.md
       if (rule.rulePattern === 'git push') {
-        const testReportPath = path.join(state.harnessProjectPath, 'test-report.md');
+        const testReportPath = path.join(base, 'test-report.md');
         try {
           if (fs.existsSync(testReportPath)) {
             const content = fs.readFileSync(testReportPath, 'utf-8');
@@ -347,7 +438,7 @@ function evaluateRule(
       const targetFile = toolInput.file_path || '';
       if (!pathMatchesPattern(targetFile, '.harness/checkpoint-')) return null;
 
-      const artefactPath = path.join(state.harnessProjectPath, rule.ruleFile);
+      const artefactPath = path.join(base, rule.ruleFile);
       if (!fs.existsSync(artefactPath)) {
         return {
           violationRule: `requireArtefact:${rule.ruleFile}`,

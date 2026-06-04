@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { CheckpointData, HarnessPhase, HarnessState } from './types';
+import { resolveProjectPath, getArtefactBasePath } from './state';
 
 const HARNESS_DIR = '.harness';
 
@@ -25,11 +26,12 @@ function hashFile(filePath: string): string | null {
  * Read and parse a checkpoint file from the project's .harness/ directory.
  */
 export function readCheckpoint(
-  projectPath: string,
+  state: HarnessState,
   phase: HarnessPhase
 ): CheckpointData | null {
+  const artefactBase = getArtefactBasePath(state);
   const checkpointFile = `checkpoint-${phase}.json`;
-  const checkpointPath = path.join(projectPath, HARNESS_DIR, checkpointFile);
+  const checkpointPath = path.join(artefactBase, HARNESS_DIR, checkpointFile);
 
   try {
     if (!fs.existsSync(checkpointPath)) return null;
@@ -46,11 +48,12 @@ export function readCheckpoint(
  * Returns an array of validation errors (empty = valid).
  */
 export function validateCheckpoint(
-  projectPath: string,
+  state: HarnessState,
   phase: HarnessPhase
 ): string[] {
+  const artefactBase = getArtefactBasePath(state);
   const errors: string[] = [];
-  const checkpoint = readCheckpoint(projectPath, phase);
+  const checkpoint = readCheckpoint(state, phase);
 
   if (!checkpoint) {
     errors.push(`Checkpoint file for phase "${phase}" does not exist`);
@@ -88,9 +91,11 @@ export function validateCheckpoint(
         continue;
       }
 
-      const fullPath = path.isAbsolute(artefact.checkpointArtefactPath)
-        ? artefact.checkpointArtefactPath
-        : path.join(projectPath, artefact.checkpointArtefactPath);
+      // F001: Resolve cross-machine path mismatches for absolute artefact paths
+      const rawPath = path.isAbsolute(artefact.checkpointArtefactPath)
+        ? resolveProjectPath(artefact.checkpointArtefactPath)
+        : path.join(artefactBase, artefact.checkpointArtefactPath);
+      const fullPath = rawPath;
 
       const exists = fs.existsSync(fullPath);
 
@@ -111,7 +116,7 @@ export function validateCheckpoint(
   }
 
   // Phase-specific validation
-  const phaseErrors = validatePhaseSpecific(projectPath, phase, checkpoint);
+  const phaseErrors = validatePhaseSpecific(state, phase, checkpoint);
   errors.push(...phaseErrors);
 
   return errors;
@@ -121,16 +126,19 @@ export function validateCheckpoint(
  * Phase-specific validation rules.
  */
 function validatePhaseSpecific(
-  projectPath: string,
+  state: HarnessState,
   phase: HarnessPhase,
   checkpoint: CheckpointData
 ): string[] {
+  const artefactBase = getArtefactBasePath(state);
+  // DR-23: PROJECT_STATUS.md and DATA_DICTIONARY.md live at project root, not artefact base
+  const projectRoot = state.harnessProjectPath;
   const errors: string[] = [];
 
   switch (phase) {
     case 'init': {
       // Feature list must exist and have features
-      const featureListPath = path.join(projectPath, 'feature-list.json');
+      const featureListPath = path.join(artefactBase, 'feature-list.json');
       if (!fs.existsSync(featureListPath)) {
         errors.push('Init checkpoint: feature-list.json does not exist');
       } else {
@@ -145,12 +153,12 @@ function validatePhaseSpecific(
       }
 
       // progress.txt must exist
-      if (!fs.existsSync(path.join(projectPath, 'progress.txt'))) {
+      if (!fs.existsSync(path.join(artefactBase, 'progress.txt'))) {
         errors.push('Init checkpoint: progress.txt does not exist');
       }
 
-      // PROJECT_STATUS.md must exist
-      if (!fs.existsSync(path.join(projectPath, 'PROJECT_STATUS.md'))) {
+      // DR-23: PROJECT_STATUS.md lives at project root
+      if (!fs.existsSync(path.join(projectRoot, 'PROJECT_STATUS.md'))) {
         errors.push('Init checkpoint: PROJECT_STATUS.md does not exist');
       }
       break;
@@ -158,7 +166,7 @@ function validatePhaseSpecific(
 
     case 'design': {
       // Design spec must exist
-      if (!fs.existsSync(path.join(projectPath, 'design-spec.md'))) {
+      if (!fs.existsSync(path.join(artefactBase, 'design-spec.md'))) {
         errors.push('Design checkpoint: design-spec.md does not exist');
       }
 
@@ -171,7 +179,7 @@ function validatePhaseSpecific(
 
     case 'dev': {
       // Feature list must exist with passes data
-      const featureListPath = path.join(projectPath, 'feature-list.json');
+      const featureListPath = path.join(artefactBase, 'feature-list.json');
       if (fs.existsSync(featureListPath)) {
         try {
           const fl = JSON.parse(fs.readFileSync(featureListPath, 'utf-8'));
@@ -188,20 +196,63 @@ function validatePhaseSpecific(
           // Feature list parse error handled elsewhere
         }
       }
+
+      // Code audit must exist and contain mandatory checks
+      const codeAuditPath = path.join(artefactBase, 'code-audit.md');
+      if (!fs.existsSync(codeAuditPath)) {
+        errors.push('Dev checkpoint: code-audit.md does not exist. Run the mandatory code audit.');
+      } else {
+        const auditContent = fs.readFileSync(codeAuditPath, 'utf-8');
+        const requiredChecks = [
+          'Functions defined but never called',
+          'Dead code',
+          'Secrets or credentials',
+        ];
+        for (const check of requiredChecks) {
+          if (!auditContent.toLowerCase().includes(check.toLowerCase())) {
+            errors.push(`Dev checkpoint: code-audit.md missing mandatory check: "${check}"`);
+          }
+        }
+      }
       break;
     }
 
     case 'test': {
       // test-report.md must exist
-      if (!fs.existsSync(path.join(projectPath, 'test-report.md'))) {
+      if (!fs.existsSync(path.join(artefactBase, 'test-report.md'))) {
         errors.push('Test checkpoint: test-report.md does not exist');
+      }
+
+      // verification-report.md must exist and trace feature verification steps
+      const verifyPath = path.join(artefactBase, 'verification-report.md');
+      if (!fs.existsSync(verifyPath)) {
+        errors.push('Test checkpoint: verification-report.md does not exist. Tester must trace every verification step from feature-list.json.');
+      } else {
+        const verifyContent = fs.readFileSync(verifyPath, 'utf-8');
+        // Cross-reference: every feature ID in feature-list.json must appear
+        // in the verification report
+        const featureListPath = path.join(artefactBase, 'feature-list.json');
+        if (fs.existsSync(featureListPath)) {
+          try {
+            const fl = JSON.parse(fs.readFileSync(featureListPath, 'utf-8'));
+            const features = fl.features || [];
+            for (const feature of features) {
+              if (feature.id && !verifyContent.includes(feature.id)) {
+                errors.push(`Test checkpoint: verification-report.md does not reference feature ${feature.id}. Every feature must be explicitly verified.`);
+              }
+            }
+          } catch {
+            // Feature list parse error handled elsewhere
+          }
+        }
       }
       break;
     }
 
     case 'release': {
       // PROJECT_STATUS.md must be updated
-      if (!fs.existsSync(path.join(projectPath, 'PROJECT_STATUS.md'))) {
+      // DR-23: PROJECT_STATUS.md lives at project root
+      if (!fs.existsSync(path.join(projectRoot, 'PROJECT_STATUS.md'))) {
         errors.push('Release checkpoint: PROJECT_STATUS.md does not exist');
       }
       break;
@@ -216,7 +267,6 @@ function validatePhaseSpecific(
  * Used by requireCheckpoint rules.
  */
 export function isPreviousCheckpointValid(
-  projectPath: string,
   state: HarnessState
 ): { valid: boolean; errors: string[] } {
   const sequence = require('./types').HARNESS_PHASE_SEQUENCES[state.harnessType];
@@ -229,6 +279,6 @@ export function isPreviousCheckpointValid(
   }
 
   const previousPhase = sequence[currentIndex - 1] as HarnessPhase;
-  const errors = validateCheckpoint(projectPath, previousPhase);
+  const errors = validateCheckpoint(state, previousPhase);
   return { valid: errors.length === 0, errors };
 }

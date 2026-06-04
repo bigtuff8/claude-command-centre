@@ -30,8 +30,11 @@ export interface HarnessOverride {
 }
 
 export interface HarnessState {
+  harnessStateVersion: number;        // Schema version (1=legacy, 2=work-folder)
   harnessProject: string;
   harnessProjectPath: string;
+  harnessWorkFolder: string | null;   // Relative path to work folder (null=legacy)
+  harnessBrief: string;               // Original brief, used for auto-rename
   harnessType: HarnessType;
   harnessMode: HarnessMode;
   harnessCurrentPhase: HarnessPhase;
@@ -135,6 +138,7 @@ export interface LedgerEvent {
   ledgerTimestamp: string;
   ledgerProjectPath: string;
   ledgerProjectName: string;
+  ledgerWorkFolder?: string | null;   // Relative path to work folder for filtering
   ledgerHarness: HarnessType;
   ledgerMode: HarnessMode;
   ledgerPhase: HarnessPhase;

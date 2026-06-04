@@ -48,11 +48,24 @@ export function getOrCreateSession(sessionId: string, cwd?: string, permissionMo
       usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, totalCostUSD: 0, model: null, lastUpdated: null },
       autoApprove: null,
       harnessPhase: null,
+      workFolderPath: null,
     };
     sessions.set(sessionId, session);
     markDirty();
   }
   if (cwd && !session.project) session.project = cwd;
+
+  // Auto-resolve workFolderPath from harness state if not yet known
+  if (!session.workFolderPath && session.project) {
+    try {
+      const { loadHarnessState } = require('../harness/state');
+      // Try legacy path first to see if there's a state with workFolder info
+      const legacyState = loadHarnessState(session.project);
+      if (legacyState && legacyState.harnessWorkFolder) {
+        session.workFolderPath = legacyState.harnessWorkFolder;
+      }
+    } catch { /* best effort */ }
+  }
   if (permissionMode) session.permissionMode = permissionMode;
   // Auto-resolve terminal PID from registry if not yet known
   if (!session.terminalPid && session.project) {
@@ -107,6 +120,7 @@ export function createSdkSession(sessionId: string, cwd: string, name: string, p
     usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, totalCostUSD: 0, model: null, lastUpdated: null },
     autoApprove: null,
     harnessPhase: null,
+    workFolderPath: null,
   };
   sessions.set(sessionId, session);
   markDirty();

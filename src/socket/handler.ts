@@ -10,6 +10,8 @@ import { getHooksConfig, setAutoApproveAll } from '../routes/hooks';
 import { getConfigPath } from '../config';
 
 export function initSocketHandler(io: SocketServer): void {
+  const broadcast = (event: string, data: any) => io.emit(event, data);
+
   io.on('connection', (socket: Socket) => {
     console.log(`[Dashboard] Client connected (${socket.id})`);
 
@@ -59,21 +61,11 @@ export function initSocketHandler(io: SocketServer): void {
       io.emit('session-removed', { sessionId: data.sessionId });
     });
 
-    // Handle new session launch from dashboard (B002: supports viaLauncher mode)
-    socket.on('launch-session', (data: { projectDir?: string; name?: string; prompt?: string; viaLauncher?: boolean }) => {
-      if (data.viaLauncher) {
-        console.log('[Launch] Opening launcher in new terminal');
-        try {
-          spawnSession('', undefined, undefined, true);
-          socket.emit('launch-ack', { success: true, name: 'Launcher' });
-        } catch (err: any) {
-          socket.emit('launch-ack', { success: false, error: err.message });
-        }
-        return;
-      }
+    // Handle new session launch from dashboard — all spawns go through shared utility
+    socket.on('launch-session', async (data: { projectDir?: string; name?: string; prompt?: string }) => {
       console.log(`[Launch] Spawning session: ${data.name || data.projectDir}`);
       try {
-        spawnSession(data.projectDir || '', data.name, data.prompt);
+        await spawnSession(data.projectDir || '', data.name, data.prompt, broadcast);
         socket.emit('launch-ack', { success: true, name: data.name || data.projectDir });
       } catch (err: any) {
         socket.emit('launch-ack', { success: false, error: err.message });

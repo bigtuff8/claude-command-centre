@@ -79,6 +79,7 @@ export function loadState(): number {
           usage: s.usage || { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, totalCostUSD: 0, model: null, lastUpdated: null },
           autoApprove: s.autoApprove ?? null,
           harnessPhase: s.harnessPhase || null,
+          workFolderPath: s.workFolderPath || null,
         };
 
         // Convert usage.lastUpdated string back to Date
@@ -132,6 +133,7 @@ export function saveState(): void {
     },
     autoApprove: s.autoApprove,
     harnessPhase: s.harnessPhase,
+    workFolderPath: s.workFolderPath,
   }));
 
   const state = {

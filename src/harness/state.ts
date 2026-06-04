@@ -15,19 +15,111 @@ import { appendLedgerEvent } from './ledger';
 
 const HARNESS_DIR = '.harness';
 const STATE_FILE = 'harness-state.json';
+const CURRENT_STATE_VERSION = 2;
+
+/**
+ * Migrate legacy (v1) harness state to current schema.
+ * Transparently upgrades state loaded from disk.
+ */
+function migrateState(state: any): HarnessState {
+  const version = state.harnessStateVersion || 1;
+  if (version < 2) {
+    state.harnessStateVersion = CURRENT_STATE_VERSION;
+    state.harnessWorkFolder = state.harnessWorkFolder ?? null;
+    state.harnessBrief = state.harnessBrief ?? '';
+  }
+  return state as HarnessState;
+}
+
+/**
+ * Get the artefact base path for a harness state.
+ * With work folders, artefacts live in {projectPath}/{workFolder}/.
+ * Without (legacy), they live in {projectPath}/.
+ */
+export function getArtefactBasePath(state: HarnessState): string {
+  if (state.harnessWorkFolder) {
+    return path.join(state.harnessProjectPath, state.harnessWorkFolder);
+  }
+  return state.harnessProjectPath;
+}
+
+/**
+ * Get the .harness directory path for a harness state.
+ */
+export function getHarnessDir(state: HarnessState): string {
+  return path.join(getArtefactBasePath(state), HARNESS_DIR);
+}
+
+/**
+ * F001: Resolve a project path that may have been stored with a different
+ * user profile name (e.g. JamesBrown vs james). Checks if the stored path
+ * exists; if not, swaps the Users\{name} segment with the current USERPROFILE.
+ * Returns the path that actually exists on disk, or the original if neither works.
+ */
+export function resolveProjectPath(storedPath: string): string {
+  if (!storedPath) return storedPath;
+
+  // If it exists as-is, use it
+  if (fs.existsSync(storedPath)) return storedPath;
+
+  // Try replacing the user profile segment with the current one
+  const home = process.env.HOME || process.env.USERPROFILE || '';
+  if (!home) return storedPath;
+
+  // Match C:\Users\{anyName}\ at the start of the path
+  const userMatch = storedPath.match(/^([A-Za-z]:\\Users\\)([^\\]+)(\\.*)/);
+  if (userMatch) {
+    const currentUser = path.basename(home);
+    if (userMatch[2] !== currentUser) {
+      const candidate = userMatch[1] + currentUser + userMatch[3];
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
+  return storedPath;
+}
 
 /**
  * Load harness state from a project directory.
  * Returns null if no harness is active for this project.
+ * F001: Resolves cross-machine path mismatches on load.
+ *
+ * @param projectPath - The project root directory
+ * @param workFolder - Optional relative path to work folder. If provided,
+ *   loads state from {projectPath}/{workFolder}/.harness/. If omitted,
+ *   falls back to legacy {projectPath}/.harness/ location.
  */
-export function loadHarnessState(projectPath: string): HarnessState | null {
+export function loadHarnessState(projectPath: string, workFolder?: string | null): HarnessState | null {
   if (!projectPath) return null;
 
-  const statePath = path.join(projectPath, HARNESS_DIR, STATE_FILE);
+  // Determine where to look for state
+  const basePath = workFolder
+    ? path.join(projectPath, workFolder)
+    : projectPath;
+  const statePath = path.join(basePath, HARNESS_DIR, STATE_FILE);
+
   try {
-    if (!fs.existsSync(statePath)) return null;
+    if (!fs.existsSync(statePath)) {
+      // If workFolder was specified but state doesn't exist there,
+      // do NOT fall back to project root (caller was explicit)
+      if (workFolder) return null;
+
+      // Legacy fallback: no workFolder specified, check project root
+      return null;
+    }
     const raw = fs.readFileSync(statePath, 'utf-8');
-    return JSON.parse(raw) as HarnessState;
+    const state = migrateState(JSON.parse(raw));
+
+    // F001: Resolve the stored project path to match the current machine.
+    const resolvedPath = resolveProjectPath(state.harnessProjectPath);
+    if (resolvedPath !== state.harnessProjectPath) {
+      console.log(`[Harness] F001 path fix: ${state.harnessProjectPath} → ${resolvedPath}`);
+      state.harnessProjectPath = resolvedPath;
+    }
+
+    return state;
   } catch (err) {
     console.log(`[Harness] Could not load state from ${statePath}: ${err}`);
     return null;
@@ -35,10 +127,14 @@ export function loadHarnessState(projectPath: string): HarnessState | null {
 }
 
 /**
- * Save harness state to the project directory.
+ * Save harness state to the correct directory.
+ * Routes through work folder when present (DR-07 fix).
+ * F001: Resolves project path before writing.
  */
 export function saveHarnessState(state: HarnessState): void {
-  const harnessDir = path.join(state.harnessProjectPath, HARNESS_DIR);
+  // F001: Always resolve the path before writing
+  state.harnessProjectPath = resolveProjectPath(state.harnessProjectPath);
+  const harnessDir = getHarnessDir(state);
   try {
     if (!fs.existsSync(harnessDir)) {
       fs.mkdirSync(harnessDir, { recursive: true });
@@ -47,23 +143,30 @@ export function saveHarnessState(state: HarnessState): void {
     const statePath = path.join(harnessDir, STATE_FILE);
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2), 'utf-8');
   } catch (err) {
-    console.log(`[Harness] Could not save state: ${err}`);
+    console.log(`[Harness] Could not save state to ${harnessDir}: ${err}`);
   }
 }
 
 /**
  * Create a new harness state for a project.
+ * @param workFolder - Relative path to work folder (e.g., '2026-06-04T14-32-05')
+ * @param brief - The original work brief (used for auto-rename at completion)
  */
 export function createHarnessState(
   projectPath: string,
   projectName: string,
   harnessType: HarnessType,
-  mode: HarnessMode
+  mode: HarnessMode,
+  workFolder?: string | null,
+  brief?: string
 ): HarnessState {
   const now = new Date().toISOString();
   const state: HarnessState = {
+    harnessStateVersion: CURRENT_STATE_VERSION,
     harnessProject: projectName,
     harnessProjectPath: projectPath,
+    harnessWorkFolder: workFolder || null,
+    harnessBrief: brief || '',
     harnessType: harnessType,
     harnessMode: mode,
     harnessCurrentPhase: 'init',
@@ -90,11 +193,12 @@ export function createHarnessState(
     ledgerTimestamp: now,
     ledgerProjectPath: projectPath,
     ledgerProjectName: projectName,
+    ledgerWorkFolder: workFolder || null,
     ledgerHarness: harnessType,
     ledgerMode: mode,
     ledgerPhase: 'init',
     ledgerSessionId: null,
-    ledgerDetail: {},
+    ledgerDetail: { workFolder: workFolder || null },
   });
 
   return state;
@@ -155,6 +259,7 @@ export function advancePhase(
     ledgerTimestamp: now,
     ledgerProjectPath: state.harnessProjectPath,
     ledgerProjectName: state.harnessProject,
+    ledgerWorkFolder: state.harnessWorkFolder,
     ledgerHarness: state.harnessType,
     ledgerMode: state.harnessMode,
     ledgerPhase: state.harnessCurrentPhase,
@@ -176,6 +281,7 @@ export function advancePhase(
     ledgerTimestamp: now,
     ledgerProjectPath: state.harnessProjectPath,
     ledgerProjectName: state.harnessProject,
+    ledgerWorkFolder: state.harnessWorkFolder,
     ledgerHarness: state.harnessType,
     ledgerMode: state.harnessMode,
     ledgerPhase: nextPhase,
@@ -221,6 +327,7 @@ export function initiateRework(
     ledgerTimestamp: now,
     ledgerProjectPath: state.harnessProjectPath,
     ledgerProjectName: state.harnessProject,
+    ledgerWorkFolder: state.harnessWorkFolder,
     ledgerHarness: state.harnessType,
     ledgerMode: state.harnessMode,
     ledgerPhase: 'dev',
@@ -246,6 +353,7 @@ export function recordOverride(
     ledgerTimestamp: override.harnessOverrideTimestamp,
     ledgerProjectPath: state.harnessProjectPath,
     ledgerProjectName: state.harnessProject,
+    ledgerWorkFolder: state.harnessWorkFolder,
     ledgerHarness: state.harnessType,
     ledgerMode: state.harnessMode,
     ledgerPhase: state.harnessCurrentPhase,
@@ -283,6 +391,7 @@ export function clearGate(
     ledgerTimestamp: new Date().toISOString(),
     ledgerProjectPath: state.harnessProjectPath,
     ledgerProjectName: state.harnessProject,
+    ledgerWorkFolder: state.harnessWorkFolder,
     ledgerHarness: state.harnessType,
     ledgerMode: state.harnessMode,
     ledgerPhase: state.harnessCurrentPhase,

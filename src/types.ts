@@ -30,6 +30,7 @@ export interface Session {
   usage: SessionUsage;
   autoApprove: boolean | null;
   harnessPhase: string | null;
+  workFolderPath: string | null;  // Relative path to work folder for harness enforcement
 }
 
 export interface HookEvent {

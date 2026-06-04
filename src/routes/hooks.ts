@@ -6,6 +6,11 @@ import { notifyPermissionRequest, notifySessionComplete } from '../services/noti
 import { loadHarnessState } from '../harness/state';
 import { checkPhaseRules } from '../harness/rules';
 import { appendLedgerEvent } from '../harness/ledger';
+import { validateCheckpoint } from '../harness/checkpoints';
+import { trackToolCall, trackCheckpointValidation } from '../harness/ledger';
+import { HarnessPhase, PHASE_CHECKPOINT_FILES } from '../harness/types';
+import { isSteerCoGate, isAutoGate, invokeSteerCoReview, invokeGateAudit, spawnPhaseSession, generateGateReviewHtml } from '../harness/orchestrator';
+import { getNextPhase, advancePhase, clearGate } from '../harness/state';
 // Terminal PID is now resolved via the registry (populated by the launcher's
 // POST to /api/register-terminal). The getOrCreateSession() call auto-applies
 // the registry lookup, so no additional discovery logic is needed here.
@@ -106,6 +111,43 @@ function handleSessionEnd(req: Request, res: Response): void {
   broadcastFn('feed-event', feedEvent);
   notifySessionComplete(session.name);
 
+  // Write .rename-pending marker for work-folder-scoped sessions (DD2, DR-02)
+  const endSessionWorkFolder = session.workFolderPath || null;
+  if (endSessionWorkFolder) {
+    const endState = loadHarnessState(session.project, endSessionWorkFolder);
+    if (endState && endState.harnessWorkFolder) {
+      const fs = require('fs');
+      const path = require('path');
+      const workFolderAbsolute = path.join(endState.harnessProjectPath, endState.harnessWorkFolder);
+      const renamePendingPath = path.join(workFolderAbsolute, '.rename-pending');
+      if (!fs.existsSync(renamePendingPath)) {
+        try {
+          // Generate target name from brief and harness type
+          const verbMap: Record<string, string> = {
+            build: 'Build', integration: 'Integrate', research: 'Research',
+            automation: 'Automate', admin: 'Admin'
+          };
+          const verb = verbMap[endState.harnessType] || 'Work';
+          const date = endState.harnessCreatedAt?.split('T')[0] || new Date().toISOString().split('T')[0];
+          let slug = (endState.harnessBrief || '').replace(/[^a-zA-Z0-9 ]/g, '').trim()
+            .split(' ').slice(0, 6).join(' ')
+            .replace(/\b\w/g, (c: string) => c.toUpperCase());
+          if (!slug) slug = endState.harnessProject;
+          const targetName = `${date} - ${verb} ${slug}`;
+
+          fs.writeFileSync(renamePendingPath, JSON.stringify({
+            targetName,
+            createdAt: new Date().toISOString(),
+            reason: 'session-end',
+          }, null, 2), 'utf-8');
+          console.log(`[SessionEnd] Wrote .rename-pending: ${targetName}`);
+        } catch (err) {
+          console.log(`[SessionEnd] Could not write .rename-pending: ${err}`);
+        }
+      }
+    }
+  }
+
   console.log(`[SessionEnd] ${session.name}`);
   res.json({});
 }
@@ -169,10 +211,15 @@ async function handlePreToolUse(req: Request, res: Response): Promise<void> {
   }
 
   // --- Harness enforcement (runs BEFORE auto-approve) ---
-  const harnessState = loadHarnessState(session.project);
+  // F009: Skip harness enforcement entirely if no harness is active for this project.
+  // DR-03/DR-20: Resolve work folder from session metadata for multi-work-folder support.
+  const sessionWorkFolder = session.workFolderPath || null;
+  const harnessState = loadHarnessState(session.project, sessionWorkFolder);
   if (harnessState) {
     session.harnessPhase = harnessState.harnessCurrentPhase;
-    const violation = checkPhaseRules(harnessState, toolName, toolInput, session.filesReadThisSession);
+    const { getArtefactBasePath } = require('../harness/state');
+    const artefactBase = getArtefactBasePath(harnessState);
+    const violation = checkPhaseRules(harnessState, toolName, toolInput, session.filesReadThisSession, artefactBase);
     if (violation) {
       console.log(`[Harness] DENIED: ${session.name} → ${toolName}: ${violation.violationReason}`);
 
@@ -181,6 +228,7 @@ async function handlePreToolUse(req: Request, res: Response): Promise<void> {
         ledgerTimestamp: new Date().toISOString(),
         ledgerProjectPath: harnessState.harnessProjectPath,
         ledgerProjectName: harnessState.harnessProject,
+        ledgerWorkFolder: harnessState.harnessWorkFolder,
         ledgerHarness: harnessState.harnessType,
         ledgerMode: harnessState.harnessMode,
         ledgerPhase: harnessState.harnessCurrentPhase,
@@ -304,6 +352,7 @@ function handlePostToolUse(req: Request, res: Response): void {
 
   session.toolCount++;
   session.lastActivity = new Date();
+  trackToolCall();
 
   // Track modified files
   if (['Edit', 'Write'].includes(toolName) && toolInput.file_path) {
@@ -337,6 +386,170 @@ function handlePostToolUse(req: Request, res: Response): void {
 
   broadcastFn('session-updated', sessionToDTO(session));
   broadcastFn('feed-event', feedEvent);
+
+  // F005: Detect checkpoint writes — trigger gate workflow
+  if (toolName === 'Write' && toolInput.file_path) {
+    const filePath = String(toolInput.file_path);
+    const checkpointMatch = filePath.match(/\.harness[/\\]checkpoint-(\w+)\.json$/);
+    if (checkpointMatch) {
+      const phase = checkpointMatch[1] as HarnessPhase;
+      const postSessionWorkFolder = session.workFolderPath || null;
+      const harnessState = loadHarnessState(session.project, postSessionWorkFolder);
+      if (harnessState) {
+        const errors = validateCheckpoint(harnessState, phase);
+        const isValid = errors.length === 0;
+
+        console.log(`[Harness] Checkpoint detected: ${phase} (valid: ${isValid})`);
+        trackCheckpointValidation(isValid);
+
+        appendLedgerEvent({
+          ledgerEventType: 'gate_pending',
+          ledgerTimestamp: new Date().toISOString(),
+          ledgerProjectPath: harnessState.harnessProjectPath,
+          ledgerProjectName: harnessState.harnessProject,
+          ledgerWorkFolder: harnessState.harnessWorkFolder,
+          ledgerHarness: harnessState.harnessType,
+          ledgerMode: harnessState.harnessMode,
+          ledgerPhase: phase,
+          ledgerSessionId: session.id,
+          ledgerDetail: { valid: isValid, errors },
+        });
+
+        broadcastFn('checkpoint-detected', {
+          sessionId: session.id,
+          projectPath: session.project,
+          phase,
+          valid: isValid,
+          errors,
+        });
+
+        const checkpointFeed: FeedEventDTO = {
+          timestamp: new Date().toISOString(),
+          sessionId: session.id,
+          sessionName: session.name,
+          eventName: isValid ? 'CheckpointValid' : 'CheckpointInvalid',
+          toolName: 'Write',
+          detail: isValid
+            ? `[HARNESS] Checkpoint for ${phase} phase validated — gate pending`
+            : `[HARNESS] Checkpoint for ${phase} phase has errors: ${errors.join('; ')}`,
+        };
+        addFeedEvent(checkpointFeed);
+        broadcastFn('feed-event', checkpointFeed);
+
+        // Determine gate type for this transition
+        const nextPhase = getNextPhase(harnessState);
+
+        if (isValid && nextPhase) {
+          const autoGate = isAutoGate(phase, nextPhase);
+          const steercoGate = isSteerCoGate(phase, nextPhase);
+
+          if (!autoGate) {
+            // MANUAL GATE — run audit agent + optional SteerCo, then generate HTML review
+            const generateHtml = (steercoReview: string | null, auditReport: string | null) => {
+              // Combine SteerCo review and audit report for the gate HTML
+              let combinedSteerco = steercoReview || '';
+              if (auditReport) {
+                combinedSteerco = (combinedSteerco ? combinedSteerco + '\n\n---\n\n' : '') +
+                  '## Independent Gate Audit\n\n' + auditReport;
+              }
+
+              const reviewFile = generateGateReviewHtml(
+                harnessState, phase, nextPhase,
+                combinedSteerco || null
+              );
+              if (reviewFile) {
+                broadcastFn('gate-review-generated', {
+                  sessionId: session.id,
+                  projectPath: session.project,
+                  phase,
+                  nextPhase,
+                  reviewFile,
+                  hasAudit: !!auditReport,
+                  hasSteerCo: !!steercoReview,
+                });
+                const gateFeed: FeedEventDTO = {
+                  timestamp: new Date().toISOString(),
+                  sessionId: session.id,
+                  sessionName: session.name,
+                  eventName: 'GateReviewGenerated',
+                  detail: `[HARNESS] Gate review HTML opened for ${phase}→${nextPhase}` +
+                    (auditReport ? ' (with audit)' : '') +
+                    (steercoReview ? ' (with SteerCo)' : '') +
+                    '. Awaiting approval.',
+                };
+                addFeedEvent(gateFeed);
+                broadcastFn('feed-event', gateFeed);
+              }
+            };
+
+            // Run audit agent and optionally SteerCo in parallel
+            const auditPromise = invokeGateAudit(harnessState, phase).catch(() => null);
+            const steercoPromise = steercoGate
+              ? invokeSteerCoReview(harnessState, phase).then((review) => {
+                  if (review) {
+                    broadcastFn('steerco-review', {
+                      sessionId: session.id,
+                      projectPath: session.project,
+                      phase,
+                      review,
+                    });
+                  }
+                  return review;
+                }).catch(() => null)
+              : Promise.resolve(null);
+
+            Promise.all([steercoPromise, auditPromise]).then(([steercoReview, auditReport]) => {
+              generateHtml(steercoReview, auditReport);
+            });
+          }
+        }
+
+        // F004: Auto-gate handling — if this transition is auto-approved,
+        // advance the state and spawn the next phase session immediately.
+        if (isValid && nextPhase && isAutoGate(phase, nextPhase)) {
+          console.log(`[Harness] Auto-gate: ${phase}→${nextPhase} (auto-approved)`);
+
+          const gateName = `auto:${phase}→${nextPhase}`;
+          clearGate(harnessState, gateName, session.id);
+          const advanced = advancePhase(harnessState, session.id);
+
+          if (advanced) {
+            broadcastFn('harness-phase-transition', {
+              projectPath: session.project,
+              nextPhase,
+              autoGate: true,
+            });
+
+            const autoFeed: FeedEventDTO = {
+              timestamp: new Date().toISOString(),
+              sessionId: session.id,
+              sessionName: session.name,
+              eventName: 'AutoGateCleared',
+              detail: `[HARNESS] Auto-gate ${phase}→${nextPhase} cleared — advancing to ${nextPhase}`,
+            };
+            addFeedEvent(autoFeed);
+            broadcastFn('feed-event', autoFeed);
+
+            // Spawn the next phase session
+            spawnPhaseSession(advanced, nextPhase).then((result) => {
+              if (result.success) {
+                console.log(`[Harness] Next phase session spawned: ${nextPhase} (PID ${result.pid})`);
+              } else {
+                console.log(`[Harness] Failed to spawn ${nextPhase} session: ${result.error}`);
+                broadcastFn('phase-session-failed', {
+                  projectPath: session.project,
+                  phase: nextPhase,
+                  error: result.error,
+                });
+              }
+            }).catch((err) => {
+              console.error(`[Harness] Session spawn error: ${err}`);
+            });
+          }
+        }
+      }
+    }
+  }
 
   res.json({});
 }
