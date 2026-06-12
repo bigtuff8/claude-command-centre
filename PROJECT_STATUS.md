@@ -1,12 +1,12 @@
 # Command Centre
 
 **Status:** Active
-**Last Active:** 2026-06-04
+**Last Active:** 2026-06-12
 **Quick Context:** Web dashboard for monitoring Claude Code sessions AND managing the full project portfolio — sessions, projects, risks, activity, audit. Windows-native, portable, shareable.
 
 ## Current State
 
-- **Version:** 0.4.0 (harness enforcement engine)
+- **Version:** 0.3.0 (harness integrity fixes + lifecycle redesign)
 - **GitHub:** `bigtuff8/claude-command-centre` (all commits pushed)
 - **Server:** Live on `0.0.0.0:4111`, auto-started by launcher + watchdog on boot
 - **Auto-update:** On boot, pulls latest from GitHub, rebuilds if needed, then starts watchdog
@@ -53,7 +53,20 @@ Global permission bar visible on all tabs. Consistent filter row frame across al
 - **Layer 3 — PreToolUse enforcement:** Denies tool calls that violate phase rules. `mustReadBefore` (must read agent prompt before writing), `blockWrite` (no code in init/design/test), `blockBash` (no commit in init, no push with failing tests), `requireCheckpoint` (previous phase must be complete).
 - **Layer 4 — Phase orchestrator:** Generates context-rich prompts per phase, validates transition readiness, executes phase advances via REST API.
 
-API endpoints: `/api/harness/status`, `/create`, `/advance`, `/transition`, `/override`, `/pause`, `/gate/clear`, `/ledger`, `/projects`, `/summary`, `/transition-ready`, `/phase-prompt`, `/validate`
+API endpoints: `/api/harness/status`, `/create`, `/advance`, `/regress`, `/transition`, `/override`, `/pause`, `/gate/clear`, `/sessions/spawn`, `/ledger`, `/projects`, `/summary`, `/transition-ready`, `/phase-prompt`, `/validate`, `/metrics`, `/success-criteria`, `/health`
+
+### Harness Integrity Fixes (v0.3.0)
+
+- **Checkpoint deadlock prevention:** `advancePhase()` validates checkpoint before advancing (discriminated union return type)
+- **Backward phase movement:** `regressPhase()` + `POST /api/harness/regress` — no checkpoint validation on regression
+- **blockWrite for harness-state.json:** Global rule prevents agents from directly editing phase state
+- **Session spawn API:** `POST /api/harness/sessions/spawn` with rate limiting, fallback copy-paste command
+- **Gate validation:** `gateName` validated with hint for field name typos
+- **Enforcement scope:** mustReadBefore exempts out-of-project files (memory, docs); requireCheckpoint stays global
+- **Transition deduplication:** Prevents concurrent checkpoint writes from double-advancing
+- **escapeCmdArg fix:** Doubled-quote (`""`) for cmd.exe, not backslash-quote (`\"`)
+- **Monitoring:** `/api/health` extended with harness enforcement status, KPI counters
+- **Dead code removed:** Orphaned tempfile logic, spawn-session.js from launcher
 
 All 7 agent prompts updated with mandatory checkpoint writing sections.
 
@@ -144,4 +157,5 @@ The enforcement engine was built (v0.4.0) but had no activation path — the lau
 | 2026-05-05 | **Harness Enforcement Engine (v0.4.0).** Root cause analysis of harness non-compliance. Designed 4-layer enforcement (SteerCo review: 8 sections, 3 amendments, all approved). Built Layers 1-3 (checkpoints, state machine, PreToolUse enforcement, ledger) + Layer 4 (orchestrator). Updated all 7 agent prompts with checkpoint writing. 25 Playwright tests passing. Fixed portfolio config (wrong username in fallback paths). Two commits pushed to GitHub. |
 | 2026-05-08 | **Launcher → Enforcement Wiring.** Identified activation gap: enforcement engine was built but the launcher never called `POST /api/harness/create` to create `.harness/harness-state.json`, so enforcement was silently skipped for all sessions. Fix applied in the launcher repo (`claude-workspace/launcher/`): `initHarnessEnforcement()` added to `command-centre.ts`, `mode` added to `HarnessSelection`, wired into `launchClaude()`. Verified end-to-end: API creates state file, status endpoint detects it, enforcement hooks read it. No changes to Command Centre code — fix was entirely in the launcher's integration layer. |
 | 2026-05-13 | **Bug fixes.** (1) Portfolio "New Session" button (top metrics bar) only switched to Sessions tab but never opened the modal — fixed to call `openNewSession()` inside the sessions iframe. (2) Auto-approve leaking: `autoPassTools` (Read, Glob, Grep, WebSearch, WebFetch) returned empty `{}` response instead of explicit `allow` decision, causing Claude Code to fall back to its own permission prompting for WebSearch/WebFetch. Fixed to return `permissionDecision: 'allow'` for all auto-pass tools. |
+| 2026-06-12 | **Harness Integrity Fixes (v0.3.0).** Full build harness session: 13 features + 7 rework items. Checkpoint deadlock prevention (advancePhase validates before advancing), backward phase movement (regressPhase + /regress API), blockWrite for harness-state.json, session spawn API with rate limiting and fallback, gate validation, enforcement scope fix, escapeCmdArg fix, monitoring KPIs. CT post-test review found 1 real bug (fallback escape), 1 metric design flaw, 1 spec deviation — all fixed in rework cycle. Live demonstration of backward-movement gap (Tester blocked, James had to edit JSON) validated the need for regressPhase(). 25 files changed, 1186 insertions. Pushed to GitHub. |
 | 2026-06-04 | **Work folder isolation bug fix.** Post-redesign pilot revealed two bugs preventing work folder isolation from working: (1) Launcher's `initHarnessEnforcement()` called `/api/harness/status/:path` without `?workFolder=xxx`, finding stale project-root state from previous sessions and returning `active: true` — skipping the `POST /api/harness/create` call entirely. Fixed to pass workFolder param and detect stale project-root state. (2) Session `workFolderPath` auto-resolution only checked project-root harness state (which had null `harnessWorkFolder`). Added work folder registry (in-memory map populated by `POST /api/harness/create`) so sessions resolve their work folder immediately. Files changed: `routes/harness.ts` (register work folder on create), `state/sessions.ts` (work folder registry + improved auto-resolution). Launcher fix in `command-centre.ts`. |
