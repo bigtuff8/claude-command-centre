@@ -2231,6 +2231,54 @@ a.nav-tab {
   }
 }
 
+/* F010: Harness tab styles */
+.harness-card {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.harness-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.harness-phase-bar {
+  display: flex;
+  gap: 4px;
+}
+.harness-phase {
+  flex: 1;
+  padding: 6px 0;
+  text-align: center;
+  font-size: .7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  border-radius: 4px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.harness-phase.done {
+  background: rgba(74, 222, 128, 0.15);
+  border-color: var(--green);
+  color: var(--green);
+}
+.harness-phase.current {
+  background: rgba(96, 165, 250, 0.2);
+  border-color: var(--blue);
+  color: var(--blue);
+  box-shadow: 0 0 8px rgba(96, 165, 250, 0.3);
+}
+.harness-card-meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: .78rem;
+  color: var(--text-secondary);
+}
+
 @media (max-width: 600px) {
   .metrics-bar { padding: 8px 12px; }
   .metrics-bar-brand { font-size: 12px; }

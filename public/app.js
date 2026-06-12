@@ -193,7 +193,12 @@ function formatElapsed(isoString) {
   const diffMs = now - start;
   const diffMin = Math.floor(diffMs / 60000);
   const diffHr = Math.floor(diffMin / 60);
+  const diffDays = Math.floor(diffHr / 24);
+  const remainHr = diffHr % 24;
   const remainMin = diffMin % 60;
+  if (diffDays > 0) {
+    return diffDays + 'd ' + remainHr + 'h ' + remainMin + 'm';
+  }
   if (diffHr > 0) {
     return diffHr + 'h ' + remainMin + 'm';
   }
@@ -207,8 +212,14 @@ function formatElapsedForCompleted(isoString) {
   const diffMs = now - last;
   const diffMin = Math.floor(diffMs / 60000);
   const diffHr = Math.floor(diffMin / 60);
+  const diffDays = Math.floor(diffHr / 24);
+  const remainHr = diffHr % 24;
+  const remainMin = diffMin % 60;
+  if (diffDays > 0) {
+    return diffDays + 'd ' + remainHr + 'h ' + remainMin + 'm ago';
+  }
   if (diffHr > 0) {
-    return diffHr + 'h ago';
+    return diffHr + 'h ' + remainMin + 'm ago';
   }
   return diffMin + 'm ago';
 }
@@ -258,18 +269,23 @@ function renderSidebar() {
     const usage = sessionUsage[s.id];
     const tokenStr = usage && usage.totalTokens > 0 ? formatTokenCount(usage.totalTokens) : '';
 
+    const canDismiss = s.status === 'completed' || s.status === 'errored' || s.status === 'stopped';
+
     return '<div class="session-item' +
       (isSelected ? ' selected' : '') +
       (needsAttention ? ' needs-attention' : '') +
       '" onclick="selectSession(\'' + s.id + '\')">' +
       '<div class="status-dot ' + s.status + (working ? ' working' : '') + '"></div>' +
       '<div class="session-info">' +
-        '<div class="session-name">' + escapeHtml(s.name) + (s.sessionType === 'sdk-managed' ? ' <span class="sdk-badge">&#9000;</span>' : '') + '</div>' +
+        '<div class="session-name-row">' +
+          '<div class="session-name">' + escapeHtml(s.name) + (s.sessionType === 'sdk-managed' ? ' <span class="sdk-badge">&#9000;</span>' : '') + '</div>' +
+          (canDismiss ? '<button class="sidebar-dismiss-btn" onclick="event.stopPropagation(); dismissSession(\'' + s.id + '\')" title="Remove session">&times;</button>' : '') +
+        '</div>' +
         '<div class="session-meta">' +
-          '<span>' + (working ? 'Working...' : capitalize(s.status)) + '</span>' +
-          '<span>' + formatTime(s.startedAt) + '</span>' +
-          '<span>' + elapsed + '</span>' +
-          (tokenStr ? '<span class="session-tokens">' + tokenStr + '</span>' : '') +
+          '<span class="meta-row"><span class="meta-label">Status</span><span>' + (working ? 'Working...' : capitalize(s.status)) + '</span></span>' +
+          '<span class="meta-row"><span class="meta-label">Opened</span><span>' + formatTime(s.startedAt) + '</span></span>' +
+          '<span class="meta-row"><span class="meta-label">Age</span><span>' + elapsed + '</span></span>' +
+          (tokenStr ? '<span class="meta-row"><span class="meta-label">Tokens</span><span class="session-tokens">' + tokenStr + '</span></span>' : '') +
         '</div>' +
       '</div>' +
     '</div>';
@@ -688,7 +704,14 @@ function loadTranscript(sessionId) {
 function focusSessionTerminal() {
   if (!selectedSessionId) return;
   fetch('/api/sessions/' + selectedSessionId + '/focus', { method: 'POST' })
-    .then(() => showToast('info', 'Switching to terminal...'))
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        showToast('info', 'Switching to terminal...');
+      } else {
+        showToast('warning', 'Could not find terminal window — session may not have been launched via the launcher');
+      }
+    })
     .catch(() => showToast('warning', 'Could not focus terminal window'));
 }
 

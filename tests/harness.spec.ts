@@ -165,11 +165,12 @@ test.describe('Harness API — Create & Status', () => {
 });
 
 test.describe('Harness Enforcement — Init Phase', () => {
-  test('Read tools should always pass (auto-pass, no enforcement)', async () => {
+  test('Read tools should always pass (auto-pass)', async () => {
     const result = await simulateRead(path.join(TEMP_PROJECT, 'agents/initialisation.md'));
 
-    // Read tools return empty response (auto-pass) — no permissionDecision
-    expect(result.hookSpecificOutput).toBeUndefined();
+    // Read tools are auto-passed with explicit allow decision
+    expect(result.hookSpecificOutput).toBeDefined();
+    expect(result.hookSpecificOutput.permissionDecision).toBe('allow');
   });
 
   test('Write to src/ should be DENIED during init phase', async () => {
@@ -490,6 +491,299 @@ test.describe('Harness Orchestrator — Phase Prompt & Transition', () => {
     expect(result.prompt).toContain('MANDATORY FIRST ACTIONS');
     expect(result.prompt).toContain('agents/developer.md');
     expect(result.prompt).toContain('design-spec.md');
+  });
+});
+
+// ---- Wave 1+2 Feature Tests (2026-05-21) ----
+
+test.describe('F001 — Path Normalisation', () => {
+  test('resolveProjectPath should fix JamesBrown to current user', async () => {
+    // Create a harness state with a mismatched user profile path
+    const mismatchProject = path.join(os.tmpdir(), `harness-path-test-${Date.now()}`);
+    const mismatchHarness = path.join(mismatchProject, '.harness');
+    fs.mkdirSync(mismatchHarness, { recursive: true });
+
+    // Write state with a fake "OtherUser" path that doesn't exist
+    const fakeState = {
+      harnessProject: 'Path Test',
+      harnessProjectPath: mismatchProject.replace(path.basename(os.homedir()), 'FakeUserProfile'),
+      harnessType: 'build',
+      harnessMode: 'airedale',
+      harnessCurrentPhase: 'init',
+      harnessPhaseHistory: [{ harnessPhase: 'init', harnessPhaseSessionId: null, harnessPhaseStartedAt: new Date().toISOString(), harnessPhaseCompletedAt: null }],
+      harnessGatesCleared: {},
+      harnessReworkCycles: 0,
+      harnessOverrides: [],
+      harnessPaused: false,
+      harnessCreatedAt: new Date().toISOString(),
+      harnessUpdatedAt: new Date().toISOString(),
+    };
+    fs.writeFileSync(path.join(mismatchHarness, 'harness-state.json'), JSON.stringify(fakeState, null, 2));
+
+    // Load via API — the path resolution should fix the path on read
+    const status = await apiGet(`status/${encodeURIComponent(mismatchProject)}`);
+    expect(status.active).toBe(true);
+    // The returned state should have the resolved path (matching the actual temp dir)
+    expect(status.state.harnessProjectPath).toBe(mismatchProject);
+
+    // Save via pause (triggers saveHarnessState with resolved path)
+    await apiPost('pause', { projectPath: mismatchProject, paused: true });
+    const savedState = JSON.parse(fs.readFileSync(path.join(mismatchHarness, 'harness-state.json'), 'utf-8'));
+    // After save, the on-disk path should be resolved to the actual path
+    expect(savedState.harnessProjectPath).toBe(mismatchProject);
+
+    fs.rmSync(mismatchProject, { recursive: true, force: true });
+  });
+});
+
+test.describe('F005 — Checkpoint Detection in PostToolUse', () => {
+  test('should detect checkpoint write and emit event', async () => {
+    // Create a fresh project with harness
+    const detectProject = path.join(os.tmpdir(), `harness-detect-${Date.now()}`);
+    const detectHarness = path.join(detectProject, '.harness');
+    fs.mkdirSync(detectHarness, { recursive: true });
+    fs.writeFileSync(path.join(detectProject, 'feature-list.json'), JSON.stringify({ features: [{ id: 'F1' }] }));
+    fs.writeFileSync(path.join(detectProject, 'progress.txt'), 'test');
+    fs.writeFileSync(path.join(detectProject, 'PROJECT_STATUS.md'), '# Test');
+
+    // Create harness state
+    await apiPost('create', {
+      projectPath: detectProject,
+      projectName: 'Detect Test',
+      harnessType: 'build',
+      mode: 'airedale',
+    });
+
+    // Write a valid checkpoint file
+    const checkpoint = {
+      checkpointPhase: 'init',
+      checkpointCompletedAt: new Date().toISOString(),
+      checkpointHarness: 'build',
+      checkpointMode: 'airedale',
+      checkpointAgentFile: 'agents/initialisation.md',
+      checkpointAgentFileReadConfirmed: true,
+      checkpointRequiredArtefacts: {},
+      checkpointNextAgent: 'designer',
+      checkpointUserConfirmed: true,
+      checkpointDetail: {},
+    };
+    fs.writeFileSync(path.join(detectHarness, 'checkpoint-init.json'), JSON.stringify(checkpoint, null, 2));
+
+    const detectSessionId = `test-detect-${Date.now()}`;
+    await postHook('session-start', { session_id: detectSessionId, cwd: detectProject });
+
+    // Simulate PostToolUse for the checkpoint write
+    const postResult = await postHook('post-tool-use', {
+      session_id: detectSessionId,
+      cwd: detectProject,
+      tool_name: 'Write',
+      tool_input: { file_path: path.join(detectHarness, 'checkpoint-init.json') },
+      tool_use_id: `tu_${Date.now()}`,
+    });
+
+    // PostToolUse always returns {} — the checkpoint detection is server-side
+    expect(postResult).toEqual({});
+
+    // Verify the ledger has a gate_pending event for this project
+    const events = await apiGet('ledger');
+    const gatePending = events.filter(
+      (e: any) => e.ledgerEventType === 'gate_pending' && e.ledgerProjectPath === detectProject
+    );
+    expect(gatePending.length).toBeGreaterThan(0);
+    expect(gatePending[gatePending.length - 1].ledgerDetail.valid).toBe(true);
+
+    await postHook('session-end', { session_id: detectSessionId, cwd: detectProject });
+    try { fs.rmSync(detectProject, { recursive: true, force: true }); } catch { /* auto-spawn may hold lock briefly */ }
+  });
+});
+
+test.describe('F006 — Gate Feedback Endpoint', () => {
+  test('should accept gate feedback and advance on full approval', async () => {
+    // Create a project with a valid init checkpoint ready for gate
+    const gateProject = path.join(os.tmpdir(), `harness-gate-${Date.now()}`);
+    const gateHarness = path.join(gateProject, '.harness');
+    fs.mkdirSync(gateHarness, { recursive: true });
+    fs.writeFileSync(path.join(gateProject, 'feature-list.json'), JSON.stringify({ features: [{ id: 'F1' }] }));
+    fs.writeFileSync(path.join(gateProject, 'progress.txt'), 'test');
+    fs.writeFileSync(path.join(gateProject, 'PROJECT_STATUS.md'), '# Test');
+
+    await apiPost('create', {
+      projectPath: gateProject,
+      projectName: 'Gate Test',
+      harnessType: 'integration',
+      mode: 'airedale',
+    });
+
+    // Write valid init checkpoint
+    const checkpoint = {
+      checkpointPhase: 'init',
+      checkpointCompletedAt: new Date().toISOString(),
+      checkpointHarness: 'integration',
+      checkpointMode: 'airedale',
+      checkpointAgentFile: 'agents/initialisation.md',
+      checkpointAgentFileReadConfirmed: true,
+      checkpointRequiredArtefacts: {},
+      checkpointNextAgent: 'researcher',
+      checkpointUserConfirmed: true,
+      checkpointDetail: {},
+    };
+    fs.writeFileSync(path.join(gateHarness, 'checkpoint-init.json'), JSON.stringify(checkpoint, null, 2));
+
+    // Advance to research first (init→research is auto-gate)
+    await apiPost('advance', { projectPath: gateProject, sessionId: 'test' });
+
+    // Now write research checkpoint
+    const researchCheckpoint = {
+      checkpointPhase: 'research',
+      checkpointCompletedAt: new Date().toISOString(),
+      checkpointHarness: 'integration',
+      checkpointMode: 'airedale',
+      checkpointAgentFile: 'agents/researcher.md',
+      checkpointAgentFileReadConfirmed: true,
+      checkpointRequiredArtefacts: {},
+      checkpointNextAgent: 'developer',
+      checkpointUserConfirmed: true,
+      checkpointDetail: {},
+    };
+    fs.writeFileSync(path.join(gateHarness, 'checkpoint-research.json'), JSON.stringify(researchCheckpoint, null, 2));
+
+    // Submit gate feedback via the /api/gate/feedback endpoint (simulating HTML review doc)
+    const feedbackRes = await fetch(`${BASE_URL}/api/gate/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        reviewType: 'design-gate',
+        project: 'Gate Test',
+        projectPath: gateProject,
+        timestamp: new Date().toISOString(),
+        sections: {
+          'section-1': { decision: 'approve', comment: '' },
+          'section-2': { decision: 'approve', comment: '' },
+        },
+      }),
+    });
+    const feedbackResult = await feedbackRes.json();
+
+    expect(feedbackResult.ok).toBe(true);
+    expect(feedbackResult.decision).toBe('approved');
+
+    // Verify the project advanced
+    const status = await apiGet(`status/${encodeURIComponent(gateProject)}`);
+    expect(status.state.harnessCurrentPhase).toBe('dev');
+
+    try { fs.rmSync(gateProject, { recursive: true, force: true }); } catch { /* auto-spawn may hold lock briefly */ }
+  });
+
+  test('should return needs-work when feedback has amendments', async () => {
+    const amendProject = path.join(os.tmpdir(), `harness-amend-${Date.now()}`);
+    const amendHarness = path.join(amendProject, '.harness');
+    fs.mkdirSync(amendHarness, { recursive: true });
+    fs.writeFileSync(path.join(amendProject, 'feature-list.json'), JSON.stringify({ features: [{ id: 'F1' }] }));
+    fs.writeFileSync(path.join(amendProject, 'progress.txt'), 'test');
+    fs.writeFileSync(path.join(amendProject, 'PROJECT_STATUS.md'), '# Test');
+
+    await apiPost('create', {
+      projectPath: amendProject,
+      projectName: 'Amend Test',
+      harnessType: 'build',
+      mode: 'airedale',
+    });
+
+    const feedbackRes = await fetch(`${BASE_URL}/api/gate/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        reviewType: 'design-gate',
+        project: 'Amend Test',
+        projectPath: amendProject,
+        sections: {
+          'section-1': { decision: 'approve' },
+          'section-2': { decision: 'amend', comment: 'Needs more detail' },
+        },
+      }),
+    });
+    const feedbackResult = await feedbackRes.json();
+
+    expect(feedbackResult.ok).toBe(true);
+    expect(feedbackResult.decision).toBe('needs-work');
+    expect(feedbackResult.amended).toBe(1);
+    expect(feedbackResult.approved).toBe(1);
+
+    fs.rmSync(amendProject, { recursive: true, force: true });
+  });
+});
+
+test.describe('F008 — Handoff Brief Validation', () => {
+  test('phase prompt should reference handoff brief when it exists', async () => {
+    // Create a project in research phase with a handoff brief from init
+    const handoffProject = path.join(os.tmpdir(), `harness-handoff-${Date.now()}`);
+    const handoffHarness = path.join(handoffProject, '.harness');
+    fs.mkdirSync(handoffHarness, { recursive: true });
+    fs.writeFileSync(path.join(handoffProject, 'feature-list.json'), JSON.stringify({ features: [{ id: 'F1' }] }));
+    fs.writeFileSync(path.join(handoffProject, 'progress.txt'), 'test');
+    fs.writeFileSync(path.join(handoffProject, 'PROJECT_STATUS.md'), '# Test');
+
+    await apiPost('create', {
+      projectPath: handoffProject,
+      projectName: 'Handoff Test',
+      harnessType: 'integration',
+      mode: 'airedale',
+    });
+
+    // Write handoff brief from init phase
+    fs.writeFileSync(path.join(handoffHarness, 'handoff-init.md'),
+      '## What Was Done\nInitialisation complete.\n\n## Key Decisions\nUsing integration harness.\n\n## Next Phase Instructions\nBegin research.');
+
+    // Advance to research
+    const initCheckpoint = {
+      checkpointPhase: 'init',
+      checkpointCompletedAt: new Date().toISOString(),
+      checkpointHarness: 'integration',
+      checkpointMode: 'airedale',
+      checkpointAgentFile: 'agents/initialisation.md',
+      checkpointAgentFileReadConfirmed: true,
+      checkpointRequiredArtefacts: {},
+      checkpointNextAgent: 'researcher',
+      checkpointUserConfirmed: true,
+      checkpointDetail: {},
+    };
+    fs.writeFileSync(path.join(handoffHarness, 'checkpoint-init.json'), JSON.stringify(initCheckpoint, null, 2));
+    await apiPost('advance', { projectPath: handoffProject, sessionId: 'test' });
+
+    // Get phase prompt for research — should reference the handoff brief
+    const promptResult = await apiGet(`phase-prompt/${encodeURIComponent(handoffProject)}?phase=research`);
+    expect(promptResult.prompt).toContain('handoff-init.md');
+
+    fs.rmSync(handoffProject, { recursive: true, force: true });
+  });
+});
+
+test.describe('F013 — Metrics & Health', () => {
+  test('should return enforcement metrics', async () => {
+    const metrics = await apiGet('metrics');
+    expect(typeof metrics.metricsUptimeSeconds).toBe('number');
+    expect(typeof metrics.metricsTotalToolCalls).toBe('number');
+    expect(typeof metrics.metricsViolations).toBe('number');
+    expect(typeof metrics.metricsGatesCleared).toBe('number');
+    expect(metrics.metricsStartedAt).toBeDefined();
+  });
+
+  test('should return health at /api/health', async () => {
+    const res = await fetch(`${BASE_URL}/api/health`);
+    const health = await res.json();
+    expect(health.status).toBe('ok');
+    expect(typeof health.uptime).toBe('number');
+    expect(health.service).toBe('command-centre');
+  });
+});
+
+test.describe('F014 — Success Criteria', () => {
+  test('should return computed success criteria', async () => {
+    const criteria = await apiGet('success-criteria');
+    // Phase compliance rate (may be null if no data, or a number)
+    expect(criteria.phaseComplianceRate === null || typeof criteria.phaseComplianceRate === 'number').toBe(true);
+    expect(typeof criteria.manualCheckpointEdits).toBe('number');
+    expect(criteria.violationsPerSession === null || typeof criteria.violationsPerSession === 'number').toBe(true);
   });
 });
 

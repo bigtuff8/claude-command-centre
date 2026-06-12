@@ -2,7 +2,7 @@ import { Server as SocketServer, Socket } from 'socket.io';
 import * as fs from 'fs';
 import { getSession, getAllSessions, sessionToDTO, getFeedEvents, removeSession, renameSession } from '../state/sessions';
 import { resolvePermission } from '../services/permission';
-import { spawnSession } from '../services/spawner';
+import { spawnSession, spawnLauncher } from '../services/spawner';
 import { launchSdkSession, sendMessage, isProcessing, killSession } from '../services/sdk-session';
 import { startPolling, stopPolling } from '../services/transcript';
 import { focusTerminalWindow } from '../services/focus';
@@ -61,12 +61,28 @@ export function initSocketHandler(io: SocketServer): void {
       io.emit('session-removed', { sessionId: data.sessionId });
     });
 
-    // Handle new session launch from dashboard — all spawns go through shared utility
-    socket.on('launch-session', async (data: { projectDir?: string; name?: string; prompt?: string }) => {
-      console.log(`[Launch] Spawning session: ${data.name || data.projectDir}`);
+    // Handle new session launch from dashboard
+    // viaLauncher: true  → open the launcher TUI in a new terminal (full project/harness selection)
+    // viaLauncher: false → spawn directly via happy/claude CLI (quick launch)
+    // Accepts both 'projectDir' and 'cwd' for the project path (portfolio sends 'cwd')
+    socket.on('launch-session', async (data: { projectDir?: string; cwd?: string; name?: string; prompt?: string; viaLauncher?: boolean }) => {
+      const projectDir = data.projectDir || data.cwd || '';
+
+      if (data.viaLauncher) {
+        console.log(`[Launch] Opening launcher in new terminal`);
+        try {
+          spawnLauncher();
+          socket.emit('launch-ack', { success: true, name: 'Launcher' });
+        } catch (err: any) {
+          socket.emit('launch-ack', { success: false, error: err.message });
+        }
+        return;
+      }
+
+      console.log(`[Launch] Spawning session: ${data.name || projectDir}`);
       try {
-        await spawnSession(data.projectDir || '', data.name, data.prompt, broadcast);
-        socket.emit('launch-ack', { success: true, name: data.name || data.projectDir });
+        await spawnSession(projectDir, data.name, data.prompt, broadcast);
+        socket.emit('launch-ack', { success: true, name: data.name || projectDir });
       } catch (err: any) {
         socket.emit('launch-ack', { success: false, error: err.message });
       }

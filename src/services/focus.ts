@@ -30,7 +30,7 @@ for ($i = 0; $i -lt 8; $i++) {
 Write-Output "not_found"
     `.trim();
 
-    exec(`powershell -EncodedCommand ${encodePsCommand(ps)}`, { timeout: 5000 }, (err, stdout) => {
+    exec(`powershell -EncodedCommand ${encodePsCommand(ps)}`, { timeout: 5000, windowsHide: true }, (err, stdout) => {
       const result = (stdout || '').trim();
       if (result === 'not_found' || !result) {
         resolve(null);
@@ -58,7 +58,7 @@ export function findWindowByTitle(titleSubstring: string): Promise<number | null
 
   return new Promise((resolve) => {
     const ps = `Get-Process | Where-Object { $_.MainWindowTitle -like '*${titleSubstring}*' -and $_.MainWindowHandle -ne 0 } | Select-Object -First 1 -ExpandProperty Id`;
-    exec(`powershell -EncodedCommand ${encodePsCommand(ps)}`, { timeout: 3000 }, (err, stdout) => {
+    exec(`powershell -EncodedCommand ${encodePsCommand(ps)}`, { timeout: 3000, windowsHide: true }, (err, stdout) => {
       const pid = parseInt((stdout || '').trim(), 10);
       resolve(isNaN(pid) ? null : pid);
     });
@@ -67,9 +67,11 @@ export function findWindowByTitle(titleSubstring: string): Promise<number | null
 
 /**
  * Bring a terminal window to the foreground on Windows.
- * Uses the stored terminalPid, or checks the registry, or gives up.
+ * Tries stored PID → registry PID → live window title search.
+ * If a stored/registry PID is stale (process gone or MainWindowHandle=0),
+ * falls through to the title search automatically.
  */
-export function focusTerminalWindow(pid: number | null, sessionName: string, projectPath?: string): boolean {
+export async function focusTerminalWindow(pid: number | null, sessionName: string, projectPath?: string): Promise<boolean> {
   if (process.platform !== 'win32') {
     console.log('[Focus] Not on Windows');
     return false;
@@ -77,25 +79,45 @@ export function focusTerminalWindow(pid: number | null, sessionName: string, pro
 
   // Try stored PID first
   if (pid) {
-    focusByPid(pid, sessionName);
-    return true;
+    const ok = await focusByPid(pid, sessionName);
+    if (ok) return true;
+    console.log(`[Focus] Stored PID ${pid} is stale for ${sessionName}, trying fallbacks...`);
   }
 
   // Try registry lookup
   if (projectPath) {
     const registeredPid = lookupTerminalPid(projectPath);
-    if (registeredPid) {
-      focusByPid(registeredPid, sessionName);
-      return true;
+    if (registeredPid && registeredPid !== pid) {
+      const ok = await focusByPid(registeredPid, sessionName);
+      if (ok) return true;
+      console.log(`[Focus] Registry PID ${registeredPid} is stale for ${sessionName}, trying title search...`);
     }
   }
 
-  console.log(`[Focus] No terminal PID for ${sessionName}`);
+  // Fallback: search for a window by project path or session name
+  const searchTerms: string[] = [];
+  if (projectPath) {
+    const folderName = projectPath.replace(/[\\/]+$/, '').split(/[\\/]/).pop();
+    if (folderName) searchTerms.push(folderName);
+  }
+  if (sessionName) searchTerms.push(sessionName);
+
+  for (const term of searchTerms) {
+    const foundPid = await findWindowByTitle(term);
+    if (foundPid) {
+      console.log(`[Focus] Found window by title search "${term}" → PID ${foundPid}`);
+      const ok = await focusByPid(foundPid, sessionName);
+      if (ok) return true;
+    }
+  }
+
+  console.log(`[Focus] No terminal window found for ${sessionName}`);
   return false;
 }
 
-function focusByPid(pid: number, label: string): void {
-  const ps = `
+function focusByPid(pid: number, label: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const ps = `
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
@@ -116,9 +138,12 @@ if ($p -and $p.MainWindowHandle -ne 0) {
     [WF]::BringWindowToTop($p.MainWindowHandle) | Out-Null
     Write-Output "focused:$($p.Id):$($p.MainWindowTitle)"
 } else { Write-Output "not_found:${pid}" }
-  `.trim();
+    `.trim();
 
-  exec(`powershell -EncodedCommand ${encodePsCommand(ps)}`, (_err, stdout) => {
-    console.log(`[Focus] ${(stdout || '').trim()} (${label})`);
+    exec(`powershell -EncodedCommand ${encodePsCommand(ps)}`, { timeout: 5000, windowsHide: true }, (_err, stdout) => {
+      const result = (stdout || '').trim();
+      console.log(`[Focus] ${result} (${label})`);
+      resolve(result.startsWith('focused:'));
+    });
   });
 }

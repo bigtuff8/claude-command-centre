@@ -1411,7 +1411,7 @@ function launchSession(cwd) {
     return;
   }
   socket.emit('launch-session', { cwd: cwd, viaLauncher: true });
-  showToast('Launching session...');
+  showToast('Launcher opened — select project to start session');
 }
 
 function openReview(path) {
@@ -1509,7 +1509,7 @@ function switchTab(tabName) {
   });
 
   // Show/hide tab content
-  var allTabs = ['sessions', 'portfolio', 'risks', 'activity', 'audit'];
+  var allTabs = ['sessions', 'portfolio', 'risks', 'activity', 'harness', 'audit'];
   allTabs.forEach(function (t) {
     var tabEl = el('tab-' + t);
     if (tabEl) tabEl.style.display = (t === tabName) ? '' : 'none';
@@ -1715,6 +1715,231 @@ function setupEventListeners() {
   var listView = el('listView');
   if (listView) listView.style.display = 'none';
 }
+
+// === F010: HARNESS TAB ===
+
+var harnessData = [];
+var harnessMetrics = {};
+
+function fetchHarnessData() {
+  Promise.all([
+    fetch('/api/harness/projects').then(function (r) { return r.json(); }),
+    fetch('/api/harness/metrics').then(function (r) { return r.json(); }),
+    fetch('/api/harness/success-criteria').then(function (r) { return r.json(); }),
+  ]).then(function (results) {
+    harnessData = results[0] || [];
+    harnessMetrics = results[1] || {};
+    var criteria = results[2] || {};
+    renderHarnessMetrics(harnessMetrics, criteria);
+    renderHarnessGrid(harnessData);
+  }).catch(function (err) {
+    console.error('[Harness] Fetch error:', err);
+  });
+}
+
+function renderHarnessMetrics(m, criteria) {
+  var compliance = el('hm-compliance');
+  var violations = el('hm-violations');
+  var gates = el('hm-gates');
+  var phases = el('hm-phases');
+  var overrides = el('hm-overrides');
+
+  if (compliance) compliance.textContent = criteria.phaseComplianceRate !== null ? criteria.phaseComplianceRate + '%' : '--';
+  if (violations) violations.textContent = m.metricsViolations || 0;
+  if (gates) gates.textContent = m.metricsGatesCleared || 0;
+  if (phases) phases.textContent = m.metricsPhaseCompletions || 0;
+  if (overrides) overrides.textContent = m.metricsOverrides || 0;
+}
+
+function renderHarnessGrid(projects) {
+  var grid = el('harnessGrid');
+  var empty = el('harnessEmpty');
+  if (!grid) return;
+
+  // Filter out test/temp projects
+  var real = projects.filter(function (p) {
+    return p.snapshotProjectPath && !p.snapshotProjectPath.includes('\\Temp\\');
+  });
+
+  if (real.length === 0) {
+    grid.innerHTML = '';
+    if (empty) empty.style.display = '';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  grid.innerHTML = real.map(function (p) {
+    var phases = getPhaseSequence(p.snapshotHarness);
+    var currentIdx = phases.indexOf(p.snapshotCurrentPhase);
+    var isPaused = p.snapshotIsPaused || false;
+    var statusColor = p.snapshotIsComplete ? 'var(--green)' : isPaused ? 'var(--amber)' : 'var(--blue)';
+    var statusLabel = p.snapshotIsComplete ? 'Complete' : isPaused ? p.snapshotCurrentPhase + ' (paused)' : p.snapshotCurrentPhase;
+
+    var phaseBar = phases.map(function (ph, i) {
+      var cls = 'harness-phase';
+      if (i < currentIdx) cls += ' done';
+      else if (i === currentIdx) cls += ' current';
+      return '<div class="' + cls + '" title="' + ph + '">' + ph.substring(0, 3) + '</div>';
+    }).join('');
+
+    var violations = p.snapshotViolationCount || 0;
+    var overrides = p.snapshotOverrideCount || 0;
+    var gatesCleared = (p.snapshotGatesCleared || []).length;
+    var gatesPending = (p.snapshotGatesPending || []).length;
+    var projectName = p.snapshotProjectName || p.snapshotProjectPath.split(/[/\\]/).pop();
+
+    // G014: Active rules for current phase
+    var rulesHtml = '';
+    var phaseRules = getPhaseRulesSummary(p.snapshotHarness, p.snapshotCurrentPhase);
+    if (phaseRules.length > 0) {
+      rulesHtml = '<div style="margin-top:6px;font-size:.75rem;color:var(--text-secondary);">' +
+        '<strong>Active rules:</strong> ' + phaseRules.join(', ') +
+      '</div>';
+    }
+
+    return '<div class="glass harness-card">' +
+      '<div class="harness-card-header">' +
+        '<strong>' + projectName + '</strong>' +
+        '<span style="color:' + statusColor + ';font-size:.8rem;font-weight:600">' + statusLabel + '</span>' +
+      '</div>' +
+      '<div class="harness-phase-bar">' + phaseBar + '</div>' +
+      '<div class="harness-card-meta">' +
+        '<span title="Harness type">' + p.snapshotHarness + '</span>' +
+        '<span title="Mode">' + p.snapshotMode + '</span>' +
+        (violations > 0 ? '<span style="color:var(--rose)" title="Violations">' + violations + ' violations</span>' : '') +
+        (gatesPending > 0 ? '<span style="color:var(--amber)" title="Gates pending">' + gatesPending + ' gate pending</span>' : '') +
+        (gatesCleared > 0 ? '<span style="color:var(--green)" title="Gates cleared">' + gatesCleared + ' gates cleared</span>' : '') +
+        (overrides > 0 ? '<span style="color:var(--rose)" title="Overrides">' + overrides + ' overrides</span>' : '') +
+      '</div>' +
+      rulesHtml +
+      '<div style="margin-top:6px;display:flex;gap:8px;">' +
+        '<button class="btn btn-sm harness-pause-btn" data-path="' + p.snapshotProjectPath.replace(/"/g, '&quot;') + '" style="font-size:.75rem;">' +
+          (p.snapshotIsComplete ? 'Complete' : isPaused ? 'Resume' : 'Pause') +
+        '</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function getPhaseSequence(harnessType) {
+  var sequences = {
+    build: ['init', 'design', 'dev', 'test', 'release'],
+    integration: ['init', 'research', 'dev', 'test', 'release'],
+    research: ['init', 'research', 'write'],
+    automation: ['init', 'research', 'dev', 'test', 'release'],
+    admin: ['init', 'research', 'write'],
+  };
+  return sequences[harnessType] || ['init', 'dev', 'test', 'release'];
+}
+
+// G014: Summarise active rules per phase (client-side, mirrors rules.ts logic)
+function getPhaseRulesSummary(harnessType, phase) {
+  var rules = [];
+  switch (phase) {
+    case 'init': rules = ['no src/ writes', 'no git commit']; break;
+    case 'design': rules = ['no src/ writes (except prototype/)', 'checkpoint required']; break;
+    case 'research': rules = ['checkpoint required']; break;
+    case 'dev': rules = ['checkpoint required', 'must read feature-list', 'code-audit.md required']; break;
+    case 'test': rules = ['no src/ writes (except tests)', 'test-report.md required', 'verification-report.md required']; break;
+    case 'release': rules = ['no git push if tests fail', 'all features must pass']; break;
+    case 'write': rules = ['checkpoint required']; break;
+  }
+  return rules;
+}
+
+// Pause toggle click handler (delegated)
+document.addEventListener('click', function (e) {
+  var btn = e.target.closest('.harness-pause-btn');
+  if (!btn) return;
+  var projectPath = btn.dataset.path;
+  if (!projectPath) return;
+
+  var isPausing = btn.textContent.trim() === 'Pause';
+  fetch('/api/harness/pause', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectPath: projectPath, paused: isPausing }),
+  }).then(function (r) { return r.json(); }).then(function (result) {
+    if (result.ok) {
+      btn.textContent = isPausing ? 'Resume' : 'Pause';
+      fetchHarnessData();
+    }
+  }).catch(function (err) { console.error('[Harness] Pause error:', err); });
+});
+
+// Socket.IO: listen for harness events
+socket.on('checkpoint-detected', function (data) {
+  console.log('[Harness] Checkpoint detected:', data);
+  fetchHarnessData();
+});
+
+socket.on('gate-approved', function (data) {
+  console.log('[Harness] Gate approved:', data);
+  fetchHarnessData();
+});
+
+socket.on('harness-phase-transition', function (data) {
+  console.log('[Harness] Phase transition:', data);
+  fetchHarnessData();
+});
+
+socket.on('phase-session-started', function (data) {
+  console.log('[Harness] Phase session started:', data);
+  fetchHarnessData();
+});
+
+socket.on('steerco-review', function (data) {
+  console.log('[Harness] SteerCo review:', data);
+  fetchHarnessData();
+});
+
+socket.on('harness-violation', function (data) {
+  console.log('[Harness] Violation:', data.violation);
+  fetchHarnessData();
+});
+
+socket.on('gate-review-generated', function (data) {
+  console.log('[Harness] Gate review HTML generated:', data.reviewFile);
+  fetchHarnessData();
+});
+
+socket.on('gate-feedback', function (data) {
+  console.log('[Harness] Gate feedback:', data.decision);
+  fetchHarnessData();
+});
+
+socket.on('harness-paused', function (data) {
+  fetchHarnessData();
+});
+
+socket.on('phase-session-failed', function (data) {
+  console.error('[Harness] Session spawn failed:', data.error);
+  fetchHarnessData();
+});
+
+socket.on('phase-session-ended', function (data) {
+  fetchHarnessData();
+});
+
+socket.on('gate-audit-complete', function (data) {
+  console.log('[Harness] Gate audit complete:', data.phase, '(' + data.reportLength + ' chars)');
+  fetchHarnessData();
+});
+
+socket.on('harness-created', function () { fetchHarnessData(); });
+socket.on('harness-override', function () { fetchHarnessData(); });
+socket.on('harness-rework', function () { fetchHarnessData(); });
+socket.on('harness-phase-advanced', function () { fetchHarnessData(); });
+socket.on('harness-gate-cleared', function () { fetchHarnessData(); });
+
+// Refresh harness data when switching to the tab
+var origSwitchTab = switchTab;
+switchTab = function (tabName) {
+  origSwitchTab(tabName);
+  if (tabName === 'harness') {
+    fetchHarnessData();
+  }
+};
 
 // === BOOTSTRAP ===
 document.addEventListener('DOMContentLoaded', init);

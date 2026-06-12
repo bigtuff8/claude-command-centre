@@ -9,6 +9,10 @@ let config: AppConfig;
 // Populated by the launcher's POST to /api/register-terminal before the session starts.
 const terminalRegistry = new Map<string, number>();
 
+// Work folder registry: maps normalized project path → relative work folder path.
+// Populated by POST /api/harness/create when a work-folder-scoped harness is created.
+const workFolderRegistry = new Map<string, string>();
+
 function normalizePath(p: string): string {
   return p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 }
@@ -19,6 +23,14 @@ export function registerTerminal(projectPath: string, windowPid: number): void {
 
 export function lookupTerminalPid(projectPath: string): number | null {
   return terminalRegistry.get(normalizePath(projectPath)) ?? null;
+}
+
+export function registerWorkFolder(projectPath: string, workFolder: string): void {
+  workFolderRegistry.set(normalizePath(projectPath), workFolder);
+}
+
+export function lookupWorkFolder(projectPath: string): string | null {
+  return workFolderRegistry.get(normalizePath(projectPath)) ?? null;
 }
 
 export function initSessionStore(appConfig: AppConfig): void {
@@ -55,16 +67,22 @@ export function getOrCreateSession(sessionId: string, cwd?: string, permissionMo
   }
   if (cwd && !session.project) session.project = cwd;
 
-  // Auto-resolve workFolderPath from harness state if not yet known
+  // Auto-resolve workFolderPath from work folder registry or harness state
   if (!session.workFolderPath && session.project) {
-    try {
-      const { loadHarnessState } = require('../harness/state');
-      // Try legacy path first to see if there's a state with workFolder info
-      const legacyState = loadHarnessState(session.project);
-      if (legacyState && legacyState.harnessWorkFolder) {
-        session.workFolderPath = legacyState.harnessWorkFolder;
-      }
-    } catch { /* best effort */ }
+    // First check the registry (populated by POST /api/harness/create)
+    const registeredWorkFolder = lookupWorkFolder(session.project);
+    if (registeredWorkFolder) {
+      session.workFolderPath = registeredWorkFolder;
+    } else {
+      // Fallback: check if the project-root harness state has a workFolder
+      try {
+        const { loadHarnessState } = require('../harness/state');
+        const legacyState = loadHarnessState(session.project);
+        if (legacyState && legacyState.harnessWorkFolder) {
+          session.workFolderPath = legacyState.harnessWorkFolder;
+        }
+      } catch { /* best effort */ }
+    }
   }
   if (permissionMode) session.permissionMode = permissionMode;
   // Auto-resolve terminal PID from registry if not yet known

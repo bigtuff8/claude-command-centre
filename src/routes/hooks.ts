@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { HookPayload, FeedEventDTO, AppConfig } from '../types';
 import { getOrCreateSession, addEvent, addFeedEvent, sessionToDTO } from '../state/sessions';
+import { markDirty } from '../state/persistence';
 import { createPermissionRequest, isAutoPassTool } from '../services/permission';
 import { notifyPermissionRequest, notifySessionComplete } from '../services/notifications';
 import { loadHarnessState } from '../harness/state';
@@ -17,6 +18,10 @@ import { getNextPhase, advancePhase, clearGate } from '../harness/state';
 
 let broadcastFn: (event: string, data: any) => void;
 let appConfig: AppConfig;
+
+// RW-07: Per-project phase-transition deduplication guard.
+// Prevents concurrent checkpoint writes from double-advancing the phase.
+const transitionInProgress: Set<string> = new Set();
 
 export function getHooksConfig(): AppConfig {
   return appConfig;
@@ -217,6 +222,11 @@ async function handlePreToolUse(req: Request, res: Response): Promise<void> {
   const harnessState = loadHarnessState(session.project, sessionWorkFolder);
   if (harnessState) {
     session.harnessPhase = harnessState.harnessCurrentPhase;
+    // F006: Sync session workFolderPath from on-disk state if stale/missing
+    if (!session.workFolderPath && harnessState.harnessWorkFolder) {
+      session.workFolderPath = harnessState.harnessWorkFolder;
+      markDirty();
+    }
     const { getArtefactBasePath } = require('../harness/state');
     const artefactBase = getArtefactBasePath(harnessState);
     const violation = checkPhaseRules(harnessState, toolName, toolInput, session.filesReadThisSession, artefactBase);
@@ -506,14 +516,25 @@ function handlePostToolUse(req: Request, res: Response): void {
 
         // F004: Auto-gate handling — if this transition is auto-approved,
         // advance the state and spawn the next phase session immediately.
-        if (isValid && nextPhase && isAutoGate(phase, nextPhase)) {
+        // RW-07: Deduplication guard prevents concurrent checkpoint writes from double-advancing.
+        const transitionKey = `${session.project}:${phase}→${nextPhase}`;
+        if (isValid && nextPhase && isAutoGate(phase, nextPhase) && !transitionInProgress.has(transitionKey)) {
+          transitionInProgress.add(transitionKey);
           console.log(`[Harness] Auto-gate: ${phase}→${nextPhase} (auto-approved)`);
 
           const gateName = `auto:${phase}→${nextPhase}`;
           clearGate(harnessState, gateName, session.id);
-          const advanced = advancePhase(harnessState, session.id);
+          const advanceResult = advancePhase(harnessState, session.id);
 
-          if (advanced) {
+          if (!advanceResult.state) {
+            console.log(`[Harness] Auto-gate advance failed: ${advanceResult.error}`);
+            broadcastFn('harness-advance-failed', {
+              projectPath: session.project,
+              phase: phase,
+              error: advanceResult.error,
+            });
+          } else {
+            const advanced = advanceResult.state;
             broadcastFn('harness-phase-transition', {
               projectPath: session.project,
               nextPhase,
@@ -544,6 +565,8 @@ function handlePostToolUse(req: Request, res: Response): void {
               }
             }).catch((err) => {
               console.error(`[Harness] Session spawn error: ${err}`);
+            }).finally(() => {
+              transitionInProgress.delete(transitionKey);
             });
           }
         }

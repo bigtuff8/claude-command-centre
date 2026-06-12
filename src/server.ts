@@ -13,6 +13,9 @@ import { createHooksRouter } from './routes/hooks';
 import { createPortfolioRouter } from './routes/portfolio';
 import { createHarnessRouter } from './routes/harness';
 import { initSocketHandler } from './socket/handler';
+import { initOrchestrator, reconcileCheckpoints } from './harness/orchestrator';
+import { getMetrics } from './harness/ledger';
+import { getAllSessions } from './state/sessions';
 
 export function createApp(config: AppConfig) {
   const app = express();
@@ -48,12 +51,43 @@ export function createApp(config: AppConfig) {
   app.use('/api/portfolio', portfolioRouter);
 
   // Harness enforcement API routes
+  initOrchestrator(broadcast);
   const harnessRouter = createHarnessRouter(broadcast);
   app.use('/api/harness', harnessRouter);
+  // F006: Alias so HTML review docs can POST to /api/gate/feedback
+  // (The handler lives at /gate/feedback inside the harness router, which
+  // makes it /api/harness/gate/feedback. This re-mount at /api makes the
+  // same handler available at /api/gate/feedback.)
+  app.use('/api', harnessRouter);
 
-  // Health check
+  // Health check (F012: includes harness enforcement status)
   app.get('/healthz', (_req, res) => {
-    res.json({ status: 'ok', uptime: process.uptime() });
+    res.json({ status: 'ok', uptime: Math.round(process.uptime()) });
+  });
+  // F012: Extended health endpoint with harness status
+  app.get('/api/health', (_req, res) => {
+    const sessions = getAllSessions();
+    const metrics = getMetrics();
+    const activeSessions = sessions.filter(s => s.status === 'active' || s.status === 'waiting');
+    const harnessActiveSessions = activeSessions.filter(s => s.harnessPhase);
+
+    res.json({
+      status: 'ok',
+      uptime: Math.round(process.uptime()),
+      service: 'command-centre',
+      harness: {
+        enforcementActive: harnessActiveSessions.length > 0,
+        activeHarnessSessions: harnessActiveSessions.length,
+        lastCheckpointValidation: {
+          validated: metrics.metricsCheckpointsValidated,
+          failed: metrics.metricsCheckpointsFailed,
+        },
+        spawnCapability: true,
+        deadlockDetected: false,
+        violations: metrics.metricsViolations,
+        overrides: metrics.metricsOverrides,
+      },
+    });
   });
 
   // API: register a terminal window PID for a project path (called by the launcher)

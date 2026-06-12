@@ -10,7 +10,7 @@ const DEFAULT_CONFIG: AppConfig = {
     enabled: true,
     sound: true,
   },
-  autoPassTools: ['Read', 'Glob', 'Grep', 'WebSearch', 'WebFetch'],
+  autoPassTools: ['Read', 'Glob', 'Grep', 'WebSearch', 'WebFetch', 'ToolSearch'],
   autoApproveAll: false,
   autoApproveTools: [],
   launcherPath: '',

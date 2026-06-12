@@ -328,12 +328,12 @@ export function executePhaseTransition(
     return { success: false, errors: readiness.errors };
   }
 
-  const updated = advancePhase(state, sessionId);
-  if (!updated) {
-    return { success: false, errors: ['Failed to advance phase'] };
+  const advanceResult = advancePhase(state, sessionId);
+  if (!advanceResult.state) {
+    return { success: false, errors: [advanceResult.error || 'Failed to advance phase'] };
   }
 
-  const prompt = buildPhasePrompt(updated, readiness.nextPhase);
+  const prompt = buildPhasePrompt(advanceResult.state, readiness.nextPhase);
 
   return {
     success: true,
@@ -464,7 +464,7 @@ export async function spawnPhaseSession(
   state: HarnessState,
   phase: HarnessPhase,
   maxRetries: number = 2
-): Promise<{ success: boolean; pid?: number; error?: string }> {
+): Promise<{ success: boolean; pid?: number; error?: string; command?: string; degraded?: boolean }> {
   const prompt = buildPhasePrompt(state, phase);
   const cwd = state.harnessProjectPath;
   const ZOMBIE_TIMEOUT_MS = 12 * 60 * 60 * 1000; // DR-15: 12h safety net for genuine zombies
@@ -535,7 +535,7 @@ export async function spawnPhaseSession(
         });
       }
 
-      return { success: true, pid: result.pid };
+      return { success: true, pid: result.pid, command: result.command, degraded: result.degraded };
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       console.error(`[Orchestrator] Spawn attempt ${attempt} failed: ${errorMsg}`);

@@ -8,6 +8,7 @@ import {
   saveHarnessState,
   createHarnessState,
   advancePhase,
+  regressPhase,
   initiateRework,
   recordOverride,
   setHarnessPaused,
@@ -15,9 +16,11 @@ import {
 } from '../harness/state';
 import { validateCheckpoint } from '../harness/checkpoints';
 import { getRequiredReads } from '../harness/rules';
-import { appendLedgerEvent, readLedgerEvents, readProjectsSnapshot, readProjectEventLog, getMetrics, computeSuccessCriteria } from '../harness/ledger';
+import { appendLedgerEvent, readLedgerEvents, readProjectsSnapshot, readProjectEventLog, getMetrics, computeSuccessCriteria, trackGateValidationError, trackSpawnResult } from '../harness/ledger';
+import { escapeCmdArg } from '../services/session-spawn';
 import { HarnessType, HarnessMode, HarnessPhase, HarnessState, HARNESS_PHASE_SEQUENCES } from '../harness/types';
 import { isPhaseTransitionReady, executePhaseTransition, buildPhasePrompt, getHarnessSummary, spawnPhaseSession } from '../harness/orchestrator';
+import { registerWorkFolder } from '../state/sessions';
 
 /**
  * Extract workFolder from request query params or body.
@@ -37,6 +40,7 @@ export function createHarnessRouter(broadcast: (event: string, data: any) => voi
   router.post('/create', handleCreate);
   router.post('/advance', handleAdvance);
   router.post('/rework', handleRework);
+  router.post('/regress', handleRegress);
   router.post('/override', handleOverride);
   router.post('/pause', handlePause);
   router.post('/gate/clear', handleClearGate);
@@ -48,6 +52,7 @@ export function createHarnessRouter(broadcast: (event: string, data: any) => voi
   router.post('/transition', handleTransition);
   router.get('/phase-prompt/:projectPath(*)', handleGetPhasePrompt);
   router.post('/gate/feedback', handleGateFeedback);
+  router.post('/sessions/spawn', handleSpawnSession);
   router.get('/metrics', handleGetMetrics);
   router.get('/success-criteria', handleGetSuccessCriteria);
   router.get('/project-events/:projectPath(*)', handleGetProjectEvents);
@@ -102,6 +107,11 @@ function handleCreate(req: Request, res: Response): void {
     brief || ''
   );
 
+  // Register work folder so session auto-resolution can find it
+  if (workFolder) {
+    registerWorkFolder(projectPath, workFolder);
+  }
+
   broadcastFn('harness-created', { projectPath, harnessType, mode, workFolder });
   res.json({ ok: true, state });
 }
@@ -115,19 +125,19 @@ function handleAdvance(req: Request, res: Response): void {
     return;
   }
 
-  const updated = advancePhase(state, sessionId || null);
-  if (!updated) {
-    res.status(400).json({ error: 'Cannot advance — already at final phase or invalid state' });
+  const result = advancePhase(state, sessionId || null);
+  if (!result.state) {
+    res.status(400).json({ error: result.error || 'Cannot advance phase' });
     return;
   }
 
   broadcastFn('harness-phase-advanced', {
     projectPath,
-    previousPhase: state.harnessPhaseHistory[state.harnessPhaseHistory.length - 2]?.harnessPhase,
-    currentPhase: updated.harnessCurrentPhase,
+    previousPhase: result.state.harnessPhaseHistory[result.state.harnessPhaseHistory.length - 2]?.harnessPhase,
+    currentPhase: result.state.harnessCurrentPhase,
   });
 
-  res.json({ ok: true, state: updated });
+  res.json({ ok: true, state: result.state });
 }
 
 function handleRework(req: Request, res: Response): void {
@@ -155,6 +165,42 @@ function handleRework(req: Request, res: Response): void {
   });
 
   res.json({ ok: true, state: updated });
+}
+
+/** RW-06: General backward phase movement for rework cycles. */
+function handleRegress(req: Request, res: Response): void {
+  const { projectPath, targetPhase, reason, sessionId } = req.body;
+
+  if (!targetPhase || typeof targetPhase !== 'string') {
+    res.status(400).json({ error: 'targetPhase is required (string)' });
+    return;
+  }
+
+  if (!reason || typeof reason !== 'string') {
+    res.status(400).json({ error: 'reason is required — explain why regression is needed' });
+    return;
+  }
+
+  const state = loadHarnessState(projectPath, extractWorkFolder(req));
+  if (!state) {
+    res.status(404).json({ error: 'No harness active for this project' });
+    return;
+  }
+
+  const result = regressPhase(state, targetPhase, sessionId || null, reason);
+  if (result.error) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+
+  broadcastFn('harness-phase-regressed', {
+    projectPath,
+    previousPhase: state.harnessCurrentPhase,
+    targetPhase,
+    reason,
+  });
+
+  res.json({ ok: true, state: result.state });
 }
 
 function handleOverride(req: Request, res: Response): void {
@@ -220,6 +266,17 @@ function handlePause(req: Request, res: Response): void {
 
 function handleClearGate(req: Request, res: Response): void {
   const { projectPath, gateName, sessionId } = req.body;
+
+  if (!gateName || typeof gateName !== 'string') {
+    trackGateValidationError();
+    res.status(400).json({
+      error: 'gateName is required (string). Valid values: designGate, preDeployment, or auto:{from}→{to}',
+      received: { gateName, gate: req.body.gate },
+      hint: req.body.gate ? 'Did you mean "gateName" instead of "gate"?' : undefined,
+    });
+    return;
+  }
+
   const state = loadHarnessState(projectPath, extractWorkFolder(req));
 
   if (!state) {
@@ -336,6 +393,89 @@ function handleGetPhasePrompt(req: Request, res: Response): void {
 
   const prompt = buildPhasePrompt(state, phase as HarnessPhase);
   res.json({ phase, prompt });
+}
+
+// F004: Rate limit tracking for session spawns
+const spawnTimestamps: Map<string, number> = new Map();
+
+/** F004: Spawn a new session for a harness phase via API. */
+async function handleSpawnSession(req: Request, res: Response): Promise<void> {
+  const { projectPath, workFolder, phase, initialMessage } = req.body;
+
+  if (!projectPath) {
+    res.status(400).json({ error: 'projectPath is required' });
+    return;
+  }
+
+  // Rate limit: 1 spawn per project per 30 seconds
+  const key = projectPath;
+  const lastSpawn = spawnTimestamps.get(key) || 0;
+  const elapsed = Date.now() - lastSpawn;
+  if (elapsed < 30000) {
+    res.status(429).json({
+      error: `Rate limited. Wait ${Math.ceil((30000 - elapsed) / 1000)}s before spawning another session for this project.`,
+    });
+    return;
+  }
+
+  const state = loadHarnessState(projectPath, workFolder || extractWorkFolder(req));
+  if (!state) {
+    res.status(404).json({ error: 'No harness active for this project' });
+    return;
+  }
+
+  const targetPhase = phase || state.harnessCurrentPhase;
+
+  // RW-03: Set rate limit timestamp before spawn (prevents spam on failure too)
+  spawnTimestamps.set(key, Date.now());
+
+  const result = await spawnPhaseSession(state, targetPhase);
+
+  if (!result.success) {
+    // RW-01: Spawn failed after retries — provide fallback copy/paste command
+    trackSpawnResult(false);
+    const fallbackPrompt = buildPhasePrompt(state, targetPhase);
+
+    res.status(500).json({
+      error: `Session spawn failed: ${result.error}`,
+      fallback: {
+        instruction: 'Open a new terminal, cd to the project, and run:',
+        command: `claude --append-system-prompt ${escapeCmdArg(fallbackPrompt.substring(0, 2000))} ${escapeCmdArg(initialMessage || 'Continue from the approved design spec.')}`,
+        projectPath,
+        phase: targetPhase,
+      },
+    });
+    return;
+  }
+
+  trackSpawnResult(true);
+
+  appendLedgerEvent({
+    ledgerEventType: 'session_spawn' as any,
+    ledgerTimestamp: new Date().toISOString(),
+    ledgerProjectPath: state.harnessProjectPath,
+    ledgerProjectName: state.harnessProject,
+    ledgerWorkFolder: state.harnessWorkFolder,
+    ledgerHarness: state.harnessType,
+    ledgerMode: state.harnessMode,
+    ledgerPhase: targetPhase,
+    ledgerSessionId: null,
+    ledgerDetail: { pid: result.pid, command: result.command, degraded: result.degraded, source: 'api' },
+  });
+
+  broadcastFn('session-spawned', {
+    projectPath,
+    phase: targetPhase,
+    pid: result.pid,
+  });
+
+  // RW-02: Include command and degraded in response per design spec
+  res.json({
+    ok: true,
+    pid: result.pid,
+    command: result.command,
+    degraded: result.degraded,
+  });
 }
 
 /** F013: Get current enforcement metrics. */

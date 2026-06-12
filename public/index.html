@@ -64,6 +64,7 @@
     <div class="nav-tab active" data-tab="portfolio">Portfolio</div>
     <div class="nav-tab" data-tab="risks">Risks</div>
     <div class="nav-tab" data-tab="activity">Activity</div>
+    <div class="nav-tab" data-tab="harness">Harness</div>
     <div class="nav-tab" data-tab="audit">Audit</div>
   </div>
   <div class="filter-row">
@@ -129,6 +130,18 @@
           <div class="pill" data-afilter="type" data-val="commits">Commits</div>
           <div class="pill" data-afilter="type" data-val="sessions">Sessions</div>
         </div>
+      </div>
+    </div>
+    <!-- Harness filters -->
+    <div class="tab-filters" id="filters-harness" style="display:none">
+      <div class="filter-pills" id="harnessStatusFilters">
+        <div class="pill active" data-hfilter="all">All</div>
+        <div class="pill" data-hfilter="active">Active</div>
+        <div class="pill" data-hfilter="paused">Paused</div>
+        <div class="pill" data-hfilter="gate">At Gate</div>
+      </div>
+      <div class="filter-right">
+        <span class="filter-hint" id="harnessFilterHint"></span>
       </div>
     </div>
     <!-- Audit filters -->
@@ -452,6 +465,43 @@
         <span class="audit-link" id="auditRiskLink">View full risk register &rarr;</span>
       </div>
 
+    </div>
+  </div>
+
+  <!-- ============================== -->
+  <!-- TAB: HARNESS -->
+  <!-- ============================== -->
+  <div id="tab-harness" style="display:none">
+    <!-- Metrics row -->
+    <div class="harness-metrics" style="display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap;">
+      <div class="glass" style="flex:1;min-width:140px;padding:16px;text-align:center;">
+        <div style="font-size:2rem;font-weight:700;color:var(--green)" id="hm-compliance">--</div>
+        <div style="font-size:.8rem;color:var(--text-secondary)">Phase Compliance %</div>
+      </div>
+      <div class="glass" style="flex:1;min-width:140px;padding:16px;text-align:center;">
+        <div style="font-size:2rem;font-weight:700;color:var(--blue)" id="hm-violations">--</div>
+        <div style="font-size:.8rem;color:var(--text-secondary)">Violations</div>
+      </div>
+      <div class="glass" style="flex:1;min-width:140px;padding:16px;text-align:center;">
+        <div style="font-size:2rem;font-weight:700;color:var(--amber)" id="hm-gates">--</div>
+        <div style="font-size:.8rem;color:var(--text-secondary)">Gates Cleared</div>
+      </div>
+      <div class="glass" style="flex:1;min-width:140px;padding:16px;text-align:center;">
+        <div style="font-size:2rem;font-weight:700;color:var(--text-secondary)" id="hm-phases">--</div>
+        <div style="font-size:.8rem;color:var(--text-secondary)">Phases Complete</div>
+      </div>
+      <div class="glass" style="flex:1;min-width:140px;padding:16px;text-align:center;">
+        <div style="font-size:2rem;font-weight:700;color:var(--rose)" id="hm-overrides">--</div>
+        <div style="font-size:.8rem;color:var(--text-secondary)">Overrides</div>
+      </div>
+    </div>
+
+    <!-- Active harnesses grid -->
+    <div id="harnessGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px;">
+      <!-- Populated by JS -->
+    </div>
+    <div id="harnessEmpty" class="glass" style="padding:32px;text-align:center;color:var(--text-secondary);display:none;">
+      No active harnesses. Launch a session with a harness via the launcher to get started.
     </div>
   </div>
 

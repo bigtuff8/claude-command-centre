@@ -236,6 +236,12 @@ interface HarnessMetrics {
   metricsHarnessesCompleted: number;
   // F014: per-gate turnaround tracking
   metricsGateTurnaroundMs: number[];
+  // F013 (Integrity Fixes): KPI counters
+  metricsCheckpointDeadlocks: number;
+  metricsSpawnSuccess: number;
+  metricsSpawnFailure: number;
+  metricsGateValidationErrors: number;
+  metricsEnforcementExemptions: number;
 }
 
 const metrics: HarnessMetrics = {
@@ -252,6 +258,11 @@ const metrics: HarnessMetrics = {
   metricsPhaseCompletions: 0,
   metricsHarnessesCompleted: 0,
   metricsGateTurnaroundMs: [],
+  metricsCheckpointDeadlocks: 0,
+  metricsSpawnSuccess: 0,
+  metricsSpawnFailure: 0,
+  metricsGateValidationErrors: 0,
+  metricsEnforcementExemptions: 0,
 };
 
 function trackMetric(event: LedgerEvent): void {
@@ -301,6 +312,30 @@ export function trackCheckpointValidation(valid: boolean): void {
   } else {
     metrics.metricsCheckpointsFailed++;
   }
+}
+
+/** F013 (Integrity Fixes): Track checkpoint deadlock prevention. */
+export function trackDeadlockPrevented(): void {
+  metrics.metricsCheckpointDeadlocks++;
+}
+
+/** F013 (Integrity Fixes): Track session spawn result. */
+export function trackSpawnResult(success: boolean): void {
+  if (success) {
+    metrics.metricsSpawnSuccess++;
+  } else {
+    metrics.metricsSpawnFailure++;
+  }
+}
+
+/** F013 (Integrity Fixes): Track gate validation error caught. */
+export function trackGateValidationError(): void {
+  metrics.metricsGateValidationErrors++;
+}
+
+/** F013 (Integrity Fixes): Track enforcement exemption for out-of-project files (F007). */
+export function trackEnforcementExemption(): void {
+  metrics.metricsEnforcementExemptions++;
 }
 
 /**

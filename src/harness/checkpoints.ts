@@ -56,7 +56,10 @@ export function validateCheckpoint(
   const checkpoint = readCheckpoint(state, phase);
 
   if (!checkpoint) {
-    errors.push(`Checkpoint file for phase "${phase}" does not exist`);
+    errors.push(
+      `Checkpoint file for phase "${phase}" does not exist. `
+      + `Write checkpoint-${phase}.json to ${path.join(getArtefactBasePath(state), HARNESS_DIR)}/ before advancing.`
+    );
     return errors;
   }
 
@@ -100,7 +103,10 @@ export function validateCheckpoint(
       const exists = fs.existsSync(fullPath);
 
       if (artefact.checkpointArtefactExists && !exists) {
-        errors.push(`Artefact "${name}": declared as existing but file not found at ${artefact.checkpointArtefactPath}`);
+        errors.push(
+          `Artefact "${name}": declared as existing but not found at ${fullPath}. `
+          + `Check: does the file exist? Is the path relative to the work folder (${artefactBase})?`
+        );
       }
 
       // Hash verification — if checkpoint declares a hash, verify it

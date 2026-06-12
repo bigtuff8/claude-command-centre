@@ -8,6 +8,7 @@ import { initPersistence, loadState, stopPersistence } from './state/persistence
 import { initPortfolioCache, stopPortfolioCache } from './portfolio/cache';
 import { PortfolioConfig } from './portfolio/types';
 import { initLedger } from './harness/ledger';
+import { reconcileCheckpoints } from './harness/orchestrator';
 
 const config = loadConfig();
 const { httpServer, io } = createApp(config);
@@ -27,14 +28,40 @@ loadState();
 const portfolioBroadcast = (event: string, data: any) => io.emit(event, data);
 const portfolioConfig: PortfolioConfig = {
   portfolioProjectRoots: config.portfolio?.projectRoots || [
-    'C:\\Users\\JamesBrown\\OneDrive - Airedale Catering Equipment\\Projects\\Work',
-    'C:\\Users\\JamesBrown\\OneDrive\\Projects\\Personal',
+    path.join(process.env.HOME || process.env.USERPROFILE || '', 'OneDrive - Airedale Catering Equipment', 'Projects', 'Work'),
+    path.join(process.env.HOME || process.env.USERPROFILE || '', 'OneDrive', 'Projects', 'Personal'),
   ],
   portfolioRefreshIntervalMs: config.portfolio?.refreshIntervalMs || 60000,
   portfolioStalenessThresholds: config.portfolio?.stalenessThresholds || { freshDays: 7, agingDays: 14, staleDays: 21 },
   portfolioMaxCommitsPerRepo: config.portfolio?.maxCommitsPerRepo || 10,
 };
 initPortfolioCache(portfolioConfig, portfolioBroadcast);
+
+// F005: Startup reconciliation — scan known project roots for unprocessed checkpoints
+const fs = require('fs');
+const reconcileRoots = portfolioConfig.portfolioProjectRoots.map((root: string) => {
+  // Resolve JamesBrown -> current user
+  const home = process.env.HOME || process.env.USERPROFILE || '';
+  if (home && !fs.existsSync(root)) {
+    const fixed = root.replace(/\\Users\\[^\\]+\\/, `\\Users\\${path.basename(home)}\\`);
+    if (fs.existsSync(fixed)) return fixed;
+  }
+  return root;
+});
+for (const root of reconcileRoots) {
+  try {
+    if (!fs.existsSync(root)) continue;
+    const entries = fs.readdirSync(root, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const projectPath = path.join(root, entry.name);
+        if (fs.existsSync(path.join(projectPath, '.harness', 'harness-state.json'))) {
+          reconcileCheckpoints(projectPath);
+        }
+      }
+    }
+  } catch { /* non-blocking */ }
+}
 
 const bindHost = config.host === 'localhost' ? '127.0.0.1' : config.host;
 const displayHost = config.host === '0.0.0.0' ? 'all interfaces' : config.host;

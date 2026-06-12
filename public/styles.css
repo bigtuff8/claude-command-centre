@@ -99,8 +99,14 @@ body {
 .status-dot.completed { background: var(--text-muted); }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 .session-info { flex: 1; min-width: 0; }
+.session-name-row { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
 .session-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.session-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; display: flex; gap: 8px; flex-wrap: wrap; }
+.sidebar-dismiss-btn { background: none; border: none; color: var(--text-muted); font-size: 14px; cursor: pointer; padding: 0 2px; line-height: 1; opacity: 0; transition: opacity 0.15s, color 0.15s; flex-shrink: 0; }
+.session-item:hover .sidebar-dismiss-btn { opacity: 1; }
+.sidebar-dismiss-btn:hover { color: var(--rose); }
+.session-meta { font-size: 11px; color: var(--text-muted); margin-top: 4px; display: flex; flex-direction: column; gap: 1px; }
+.meta-row { display: flex; align-items: center; gap: 6px; }
+.meta-label { color: var(--text-muted); opacity: 0.6; min-width: 42px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.3px; }
 .session-tokens { color: var(--blue); font-family: 'JetBrains Mono', monospace; font-size: 10px; }
 
 /* === CONTENT AREA === */

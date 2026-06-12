@@ -11,7 +11,8 @@ import {
   HarnessOverride,
   HARNESS_PHASE_SEQUENCES,
 } from './types';
-import { appendLedgerEvent } from './ledger';
+import { appendLedgerEvent, trackDeadlockPrevented } from './ledger';
+import { validateCheckpoint } from './checkpoints';
 
 const HARNESS_DIR = '.harness';
 const STATE_FILE = 'harness-state.json';
@@ -234,14 +235,28 @@ export function getPreviousPhase(state: HarnessState): HarnessPhase | null {
 
 /**
  * Advance the harness to the next phase.
- * Returns the updated state, or null if advancement is not possible.
+ * F001: Validates current phase checkpoint before allowing advancement.
+ * Returns discriminated union: { state } on success, { error } on failure.
  */
 export function advancePhase(
   state: HarnessState,
   sessionId: string | null
-): HarnessState | null {
+): { state: HarnessState; error?: undefined } | { state?: undefined; error: string } {
   const nextPhase = getNextPhase(state);
-  if (!nextPhase) return null;
+  if (!nextPhase) return { error: 'Cannot advance — already at final phase' };
+
+  // F001: Validate current phase checkpoint before allowing advancement.
+  // This prevents the deadlock scenario where phase advances but checkpoint is missing.
+  const currentPhase = state.harnessCurrentPhase;
+  const checkpointErrors = validateCheckpoint(state, currentPhase);
+  if (checkpointErrors.length > 0) {
+    trackDeadlockPrevented();
+    return {
+      error: `Cannot advance from "${currentPhase}" to "${nextPhase}": checkpoint-${currentPhase}.json is invalid. `
+        + `Fix: ${checkpointErrors[0]}. `
+        + `Write a valid checkpoint-${currentPhase}.json before advancing.`,
+    };
+  }
 
   const now = new Date().toISOString();
 
@@ -290,11 +305,85 @@ export function advancePhase(
   });
 
   saveHarnessState(state);
-  return state;
+  return { state };
+}
+
+/**
+ * RW-06: General backward phase movement for rework cycles.
+ * No checkpoint validation on regression — going backward should never block.
+ * Forward movement validates; backward movement does not.
+ */
+export function regressPhase(
+  state: HarnessState,
+  targetPhase: string,
+  sessionId: string | null,
+  reason: string
+): { state: HarnessState; error?: undefined } | { state?: undefined; error: string } {
+  const sequence = HARNESS_PHASE_SEQUENCES[state.harnessType];
+  if (!sequence) return { error: `Unknown harness type: "${state.harnessType}"` };
+
+  const currentIndex = sequence.indexOf(state.harnessCurrentPhase);
+  const targetIndex = sequence.indexOf(targetPhase as HarnessPhase);
+
+  if (targetIndex < 0) {
+    return { error: `Unknown phase: "${targetPhase}"` };
+  }
+
+  if (targetIndex >= currentIndex) {
+    return { error: `Cannot regress forward. Current: "${state.harnessCurrentPhase}", target: "${targetPhase}". Use advancePhase() instead.` };
+  }
+
+  const now = new Date().toISOString();
+
+  // Mark current phase as incomplete (rework)
+  const currentEntry = state.harnessPhaseHistory.find(
+    (e) => e.harnessPhase === state.harnessCurrentPhase && !e.harnessPhaseCompletedAt
+  );
+  if (currentEntry) {
+    currentEntry.harnessPhaseCompletedAt = now;
+  }
+
+  appendLedgerEvent({
+    ledgerEventType: 'phase_regress' as any,
+    ledgerTimestamp: now,
+    ledgerProjectPath: state.harnessProjectPath,
+    ledgerProjectName: state.harnessProject,
+    ledgerWorkFolder: state.harnessWorkFolder,
+    ledgerHarness: state.harnessType,
+    ledgerMode: state.harnessMode,
+    ledgerPhase: state.harnessCurrentPhase,
+    ledgerSessionId: sessionId,
+    ledgerDetail: { targetPhase, reason },
+  });
+
+  state.harnessCurrentPhase = targetPhase as HarnessPhase;
+  state.harnessPhaseHistory.push({
+    harnessPhase: targetPhase as HarnessPhase,
+    harnessPhaseSessionId: sessionId,
+    harnessPhaseStartedAt: now,
+    harnessPhaseCompletedAt: null,
+  });
+
+  appendLedgerEvent({
+    ledgerEventType: 'phase_start',
+    ledgerTimestamp: now,
+    ledgerProjectPath: state.harnessProjectPath,
+    ledgerProjectName: state.harnessProject,
+    ledgerWorkFolder: state.harnessWorkFolder,
+    ledgerHarness: state.harnessType,
+    ledgerMode: state.harnessMode,
+    ledgerPhase: targetPhase as HarnessPhase,
+    ledgerSessionId: sessionId,
+    ledgerDetail: { rework: true, regressionFrom: currentEntry?.harnessPhase, reason },
+  });
+
+  saveHarnessState(state);
+  return { state };
 }
 
 /**
  * Send the harness back to the dev phase for rework (from test phase).
+ * Legacy convenience wrapper around regressPhase().
  */
 export function initiateRework(
   state: HarnessState,
@@ -303,40 +392,12 @@ export function initiateRework(
   if (state.harnessCurrentPhase !== 'test') return null;
   if (state.harnessReworkCycles >= 2) return null;
 
-  const now = new Date().toISOString();
   state.harnessReworkCycles++;
 
-  // Mark test phase entry as complete
-  const testEntry = state.harnessPhaseHistory.find(
-    (e) => e.harnessPhase === 'test' && !e.harnessPhaseCompletedAt
-  );
-  if (testEntry) {
-    testEntry.harnessPhaseCompletedAt = now;
-  }
+  const result = regressPhase(state, 'dev', sessionId, `Tester rework cycle ${state.harnessReworkCycles}`);
+  if (result.error) return null;
 
-  state.harnessCurrentPhase = 'dev';
-  state.harnessPhaseHistory.push({
-    harnessPhase: 'dev',
-    harnessPhaseSessionId: sessionId,
-    harnessPhaseStartedAt: now,
-    harnessPhaseCompletedAt: null,
-  });
-
-  appendLedgerEvent({
-    ledgerEventType: 'rework',
-    ledgerTimestamp: now,
-    ledgerProjectPath: state.harnessProjectPath,
-    ledgerProjectName: state.harnessProject,
-    ledgerWorkFolder: state.harnessWorkFolder,
-    ledgerHarness: state.harnessType,
-    ledgerMode: state.harnessMode,
-    ledgerPhase: 'dev',
-    ledgerSessionId: sessionId,
-    ledgerDetail: { reworkCycle: state.harnessReworkCycles },
-  });
-
-  saveHarnessState(state);
-  return state;
+  return result.state!;
 }
 
 /**

@@ -4,8 +4,6 @@
 
 import { spawn, ChildProcess } from 'child_process';
 import { join } from 'path';
-import { writeFileSync, existsSync, unlinkSync } from 'fs';
-import { tmpdir } from 'os';
 
 export interface SpawnOptions {
   projectPath: string;
@@ -66,9 +64,11 @@ async function resolveCommand(): Promise<{ command: string; isHappy: boolean }> 
 /**
  * Escape a command argument for cmd.exe (F015 pattern).
  */
-function escapeCmdArg(arg: string): string {
-  // Wrap in double quotes, escape internal double quotes
-  return `"${arg.replace(/"/g, '\\"')}"`;
+export function escapeCmdArg(arg: string): string {
+  // cmd.exe uses doubled-quotes inside double-quoted strings, not backslash-quote.
+  // Also escape % to prevent environment variable expansion.
+  // Aligned with launcher.ts:203-204.
+  return '"' + arg.replace(/"/g, '""').replace(/%/g, '%%') + '"';
 }
 
 /**
@@ -90,18 +90,8 @@ export async function spawnHappySession(
   }
 
   if (options.systemPrompt) {
-    // Write prompt to temp file to avoid cmd.exe buffer overflow
-    const tempFile = join(tmpdir(), `cc-prompt-${Date.now()}.txt`);
-    writeFileSync(tempFile, options.systemPrompt, 'utf-8');
-
-    // Read from temp file and pass as system prompt
     const promptContent = options.systemPrompt.replace(/\r?\n/g, ' ');
     args.push('--append-system-prompt', promptContent);
-
-    // Clean up temp file after a delay
-    setTimeout(() => {
-      try { unlinkSync(tempFile); } catch { /* ignore */ }
-    }, 10000);
   }
 
   if (options.initialMessage) {

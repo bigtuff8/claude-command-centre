@@ -14,6 +14,7 @@ import {
 } from './types';
 import { isPreviousCheckpointValid } from './checkpoints';
 import { getArtefactBasePath } from './state';
+import { trackEnforcementExemption } from './ledger';
 
 /**
  * Normalise a file path to a suffix for matching.
@@ -97,6 +98,14 @@ function getPhaseRules(harnessType: HarnessType, phase: HarnessPhase, mode: stri
       });
     }
   }
+
+  // RW-05: Global rule — block direct writes to harness-state.json in ALL phases.
+  // The CC manages phase state. Agents must write checkpoints instead.
+  rules.push({
+    ruleType: 'blockWrite',
+    rulePattern: '.harness/harness-state.json',
+    ruleReason: 'NEVER write harness-state.json directly. The Command Centre manages phase state. Write your checkpoint file instead — the CC will advance the phase automatically.',
+  });
 
   switch (phase) {
     case 'init':
@@ -335,6 +344,18 @@ function evaluateRule(
     case 'mustReadBefore': {
       // Only enforced for the specified tools
       if (!rule.ruleBeforeTools.includes(toolName)) return null;
+
+      // F007: Skip mustReadBefore for files outside the project directory.
+      // Memory files, docs in other folders, etc. don't need standards enforcement.
+      // requireCheckpoint and blockWrite rules are NOT affected by this exemption.
+      if ((toolName === 'Write' || toolName === 'Edit') && toolInput.file_path) {
+        const targetFile = normalisePath(String(toolInput.file_path));
+        const projectRoot = normalisePath(state.harnessProjectPath) + '/';
+        if (!targetFile.startsWith(projectRoot)) {
+          trackEnforcementExemption();
+          return null; // File outside project — exempt from mustReadBefore
+        }
+      }
 
       // Check if the required file has been read this session
       const hasRead = Array.from(filesRead).some((readPath) =>
