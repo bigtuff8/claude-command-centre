@@ -67,9 +67,50 @@ function bashCommandMatches(command: string, pattern: string): boolean {
   }
 }
 
+// ---- GAP-02: Tech-stack detection for conditional standards enforcement ----
+
+/**
+ * Check if a project directory contains files with a given extension.
+ * Shallow scan of src/ and project root — avoids deep recursion.
+ */
+function projectHasFileType(projectPath: string, extension: string): boolean {
+  const dirsToCheck = [projectPath, path.join(projectPath, 'src')];
+  for (const dir of dirsToCheck) {
+    try {
+      if (!fs.existsSync(dir)) continue;
+      const entries = fs.readdirSync(dir);
+      if (entries.some(e => e.endsWith(extension))) return true;
+    } catch { /* skip unreadable dirs */ }
+  }
+  return false;
+}
+
+/**
+ * Check if a project uses Cosmos DB by looking for common indicators:
+ * - .csproj referencing Microsoft.Azure.Cosmos
+ * - appsettings*.json referencing "Cosmos"
+ */
+function projectHasCosmosUsage(projectPath: string): boolean {
+  const srcDir = path.join(projectPath, 'src');
+  const dirsToCheck = [projectPath, srcDir];
+  for (const dir of dirsToCheck) {
+    try {
+      if (!fs.existsSync(dir)) continue;
+      const entries = fs.readdirSync(dir);
+      for (const entry of entries) {
+        if (entry.endsWith('.csproj') || entry.startsWith('appsettings')) {
+          const content = fs.readFileSync(path.join(dir, entry), 'utf-8');
+          if (content.includes('Cosmos') || content.includes('cosmos')) return true;
+        }
+      }
+    } catch { /* skip */ }
+  }
+  return false;
+}
+
 // ---- Rule definitions per harness type and phase ----
 
-function getPhaseRules(harnessType: HarnessType, phase: HarnessPhase, mode: string, projectPath?: string): HarnessRule[] {
+function getPhaseRules(harnessType: HarnessType, phase: HarnessPhase, mode: string, projectPath?: string, projectRoot?: string): HarnessRule[] {
   const agentFile = PHASE_AGENT_FILES[phase] || '';
   const rules: HarnessRule[] = [];
 
@@ -80,6 +121,20 @@ function getPhaseRules(harnessType: HarnessType, phase: HarnessPhase, mode: stri
       ruleFile: agentFile,
       ruleBeforeTools: ['Write', 'Edit', 'Bash'],
     });
+  }
+
+  // MISSED-01: Must read the formatted phase prompt (written by session-spawn.ts).
+  // The --append-system-prompt is flattened for cmd.exe compatibility; this file
+  // preserves the structured enforcement notices with headers and bullet points.
+  if (projectPath) {
+    const phasePromptPath = path.join(projectPath, '.harness', 'phase-prompt.md');
+    if (fs.existsSync(phasePromptPath)) {
+      rules.push({
+        ruleType: 'mustReadBefore',
+        ruleFile: 'phase-prompt.md',
+        ruleBeforeTools: ['Write', 'Edit', 'Bash'],
+      });
+    }
   }
 
   // F008: Must read handoff brief from previous phase (only if the file exists)
@@ -177,7 +232,9 @@ function getPhaseRules(harnessType: HarnessType, phase: HarnessPhase, mode: stri
         ruleFile: 'progress.txt',
         ruleBeforeTools: ['Write', 'Edit'],
       });
-      // Airedale: must read standards
+      // GAP-02: Airedale mode — enforce reading relevant standards before code writes.
+      // csharp-blazor and security always apply. SQL and Cosmos are conditional on
+      // project content (detected by file extension presence).
       if (mode === 'airedale') {
         rules.push({
           ruleType: 'mustReadBefore',
@@ -185,6 +242,30 @@ function getPhaseRules(harnessType: HarnessType, phase: HarnessPhase, mode: stri
           ruleBeforeTools: ['Write', 'Edit'],
           ruleCondition: 'airedale',
         });
+        rules.push({
+          ruleType: 'mustReadBefore',
+          ruleFile: 'security-standards.md',
+          ruleBeforeTools: ['Write', 'Edit'],
+          ruleCondition: 'airedale',
+        });
+        // Conditional: SQL standards if project has .sql files
+        // CT-1: Use projectRoot (actual source directory), not projectPath (artefact base)
+        const sourceRoot = projectRoot || projectPath;
+        if (sourceRoot && projectHasFileType(sourceRoot, '.sql')) {
+          rules.push({
+            ruleType: 'mustReadBefore',
+            ruleFile: 'sql-standards.md',
+            ruleBeforeTools: ['Write', 'Edit'],
+          });
+        }
+        // Conditional: Cosmos DB standards if project references Cosmos
+        if (sourceRoot && projectHasCosmosUsage(sourceRoot)) {
+          rules.push({
+            ruleType: 'mustReadBefore',
+            ruleFile: 'cosmosdb-standards.md',
+            ruleBeforeTools: ['Write', 'Edit'],
+          });
+        }
       }
       // Code audit must be written before dev checkpoint.
       // Enforces the Work/CLAUDE.md completion workflow: functions defined
@@ -317,7 +398,8 @@ export function checkPhaseRules(
     }
   }
 
-  const rules = getPhaseRules(state.harnessType, state.harnessCurrentPhase, state.harnessMode, base);
+  // CT-1: Pass both artefact base (for file checks) and project root (for tech-stack detection)
+  const rules = getPhaseRules(state.harnessType, state.harnessCurrentPhase, state.harnessMode, base, state.harnessProjectPath);
 
   for (const rule of rules) {
     const violation = evaluateRule(rule, state, toolName, toolInput, filesReadThisSession, base);
@@ -363,10 +445,25 @@ function evaluateRule(
       );
 
       if (!hasRead) {
+        // CT-6: Include path hint for standards files so agents know where to find them
+        const STANDARDS_PATH_HINT: Record<string, string> = {
+          'csharp-blazor-standards.md': '.claude-docs/csharp-blazor-standards.md',
+          'security-standards.md': '.claude-docs/security-standards.md',
+          'sql-standards.md': '.claude-docs/sql-standards.md',
+          'cosmosdb-standards.md': '.claude-docs/cosmosdb-standards.md',
+          'testing-standards.md': '.claude-docs/testing-standards.md',
+          'zendesk-integration.md': '.claude-docs/zendesk-integration.md',
+          'md-standards.md': '.claude-docs/md-standards.md',
+        };
+        const pathHint = STANDARDS_PATH_HINT[rule.ruleFile];
+        const fixMsg = pathHint
+          ? `Read "${pathHint}" first (look in the .claude-docs/ directory under the Projects root). This is mandatory for the ${state.harnessCurrentPhase} phase.`
+          : `Read the file "${rule.ruleFile}" first. This is mandatory for the ${state.harnessCurrentPhase} phase.`;
+
         return {
           violationRule: `mustReadBefore:${rule.ruleFile}`,
           violationReason: `Phase "${state.harnessCurrentPhase}" requires reading "${rule.ruleFile}" before using ${toolName}`,
-          violationFix: `Read the file "${rule.ruleFile}" first. This is mandatory for the ${state.harnessCurrentPhase} phase.`,
+          violationFix: fixMsg,
         };
       }
       return null;

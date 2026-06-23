@@ -109,6 +109,13 @@ socket.on('session-removed', (data) => {
   renderAll();
 });
 
+socket.on('sessions-bulk-removed', (data) => {
+  const ids = new Set(data.sessionIds || []);
+  sessions = sessions.filter(s => !ids.has(s.id));
+  if (ids.has(selectedSessionId)) selectedSessionId = null;
+  renderAll();
+});
+
 socket.on('transcript-update', (data) => {
   if (data.sessionId === selectedSessionId && data.messages) {
     transcriptMessages = transcriptMessages.concat(data.messages);
@@ -774,6 +781,16 @@ function dismissSession(sessionId) {
   } else {
     socket.emit('dismiss-session', { sessionId: sessionId });
   }
+}
+
+function dismissAllFinished() {
+  const finished = sessions.filter(s => s.status === 'completed' || s.status === 'errored' || s.status === 'stopped');
+  if (finished.length === 0) {
+    showToast('info', 'No finished sessions to clear');
+    return;
+  }
+  socket.emit('dismiss-all-finished');
+  showToast('success', 'Cleared ' + finished.length + ' finished session' + (finished.length !== 1 ? 's' : ''));
 }
 
 function startRename(sessionId, el) {

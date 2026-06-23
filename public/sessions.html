@@ -135,7 +135,10 @@
   <div class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <h3>Sessions</h3>
-      <button class="sidebar-collapse-btn" onclick="toggleSidebar()" title="Collapse sidebar">&#9664;</button>
+      <div class="sidebar-header-actions">
+        <button class="sidebar-clear-btn" id="btnClearFinished" onclick="dismissAllFinished()" title="Remove all finished sessions">Clear finished</button>
+        <button class="sidebar-collapse-btn" onclick="toggleSidebar()" title="Collapse sidebar">&#9664;</button>
+      </div>
     </div>
     <div class="session-list" id="sessionList"></div>
   </div>

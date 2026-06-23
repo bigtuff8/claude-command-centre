@@ -90,8 +90,27 @@ export async function spawnHappySession(
   }
 
   if (options.systemPrompt) {
+    // MISSED-01: Newlines MUST be flattened for --append-system-prompt on Windows.
+    // The spawn goes through cmd.exe (/d /s /c), which breaks on literal newlines
+    // in arguments even when properly quoted. The original structured prompt is
+    // written to .harness/phase-prompt.md so agents can read it with formatting.
     const promptContent = options.systemPrompt.replace(/\r?\n/g, ' ');
     args.push('--append-system-prompt', promptContent);
+
+    // CT-5: Write the formatted (unflattened) prompt to disk for agent readability.
+    // Works with or without a work folder — agents always get the structured version.
+    if (options.harnessContext) {
+      try {
+        const baseDir = options.workFolderPath
+          ? join(options.projectPath, options.workFolderPath)
+          : options.projectPath;
+        const harnessDir = join(baseDir, '.harness');
+        const promptFile = join(harnessDir, 'phase-prompt.md');
+        const { mkdirSync, writeFileSync } = require('fs');
+        mkdirSync(harnessDir, { recursive: true });
+        writeFileSync(promptFile, options.systemPrompt, 'utf-8');
+      } catch { /* non-critical — agent still gets flattened version */ }
+    }
   }
 
   if (options.initialMessage) {

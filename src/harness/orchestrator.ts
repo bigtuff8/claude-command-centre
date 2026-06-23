@@ -70,6 +70,12 @@ export function buildPhasePrompt(state: HarnessState, phase: HarnessPhase): stri
 
   let step = 1;
 
+  // MISSED-01: Phase prompt file contains the formatted version of this prompt
+  if (wf) {
+    lines.push(`${step}. Read the formatted phase prompt: \`${wf}/.harness/phase-prompt.md\` (this prompt with full formatting)`);
+    step++;
+  }
+
   // Agent prompt is always first
   lines.push(`${step}. Read the agent prompt: \`${agentFile}\``);
   step++;
@@ -131,6 +137,9 @@ export function buildPhasePrompt(state: HarnessState, phase: HarnessPhase): stri
     case 'dev':
       lines.push('- You MUST read all required files before writing code');
       lines.push('- Previous phase checkpoint must be valid');
+      if (state.harnessMode === 'airedale') {
+        lines.push('- You MUST read `csharp-blazor-standards.md` AND `security-standards.md` before writing code (GAP-02 enforcement)');
+      }
       lines.push('- You MUST write `code-audit.md` BEFORE the checkpoint — this is enforced');
       lines.push('- The code audit MUST include checks for: functions defined but never called, dead code, secrets/credentials');
       lines.push('- The checkpoint will be REJECTED if code-audit.md is missing or incomplete');
@@ -443,6 +452,10 @@ function escapeCmdArg(arg: string): string {
  * Avoids cmd.exe buffer overflow for long prompts (F015).
  * CRITICAL: Flattens newlines to spaces — `set /p` in cmd.exe only reads
  * the first line, so the entire prompt must be on a single line.
+ *
+ * MISSED-01 note: This function is ONLY used by invokeSteerCoReview() for
+ * headless SteerCo sessions (which still use the cmd.exe `set /p` pattern).
+ * Interactive phase sessions use session-spawn.ts instead.
  */
 function writePromptToTempFile(prompt: string, label: string): string {
   const tmpFile = path.join(os.tmpdir(), `claude-${label}-${Date.now()}.txt`);

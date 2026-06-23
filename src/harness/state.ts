@@ -29,6 +29,10 @@ function migrateState(state: any): HarnessState {
     state.harnessWorkFolder = state.harnessWorkFolder ?? null;
     state.harnessBrief = state.harnessBrief ?? '';
   }
+  // RISK-05: Ensure pendingSpawn field exists (added in v0.4.0)
+  if (state.harnessPendingSpawn === undefined) {
+    state.harnessPendingSpawn = null;
+  }
   return state as HarnessState;
 }
 
@@ -427,6 +431,51 @@ export function recordOverride(
   });
 
   saveHarnessState(state);
+}
+
+/**
+ * RISK-05: Set a pendingSpawn flag before attempting to spawn a session.
+ * If the spawn fails after advancePhase() has committed, this flag remains set
+ * so reconciliation can detect the orphaned phase and retry or alert.
+ */
+export function setPendingSpawn(state: HarnessState, phase: HarnessPhase): void {
+  state.harnessPendingSpawn = {
+    harnessPendingPhase: phase,
+    harnessPendingSetAt: new Date().toISOString(),
+    harnessPendingAttempts: (state.harnessPendingSpawn?.harnessPendingAttempts || 0) + 1,
+  };
+  saveHarnessState(state);
+}
+
+/**
+ * RISK-05: Clear the pendingSpawn flag after a successful session spawn.
+ * CT-3: Reloads state from disk before clearing to avoid overwriting
+ * changes made by the spawned agent between spawn and this callback.
+ */
+export function clearPendingSpawn(state: HarnessState): void {
+  // Reload fresh state from disk to avoid saving stale in-memory version
+  const fresh = loadHarnessState(state.harnessProjectPath, state.harnessWorkFolder);
+  if (fresh && fresh.harnessPendingSpawn) {
+    fresh.harnessPendingSpawn = null;
+    saveHarnessState(fresh);
+  }
+  // Also update the in-memory reference for caller consistency
+  state.harnessPendingSpawn = null;
+}
+
+/**
+ * RISK-05: Check if a harness state has a stale pendingSpawn.
+ * Returns the pending phase if spawn was set but never cleared (spawn failure),
+ * or null if no pending spawn or it was recently set (within 30s grace period).
+ */
+export function checkPendingSpawn(state: HarnessState): HarnessPhase | null {
+  if (!state.harnessPendingSpawn) return null;
+
+  const setAt = new Date(state.harnessPendingSpawn.harnessPendingSetAt).getTime();
+  const gracePeriodMs = 30_000; // 30s — allow time for spawn + retry
+  if (Date.now() - setAt < gracePeriodMs) return null;
+
+  return state.harnessPendingSpawn.harnessPendingPhase;
 }
 
 /**

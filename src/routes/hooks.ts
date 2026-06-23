@@ -4,14 +4,13 @@ import { getOrCreateSession, addEvent, addFeedEvent, sessionToDTO } from '../sta
 import { markDirty } from '../state/persistence';
 import { createPermissionRequest, isAutoPassTool } from '../services/permission';
 import { notifyPermissionRequest, notifySessionComplete } from '../services/notifications';
-import { loadHarnessState } from '../harness/state';
+import { loadHarnessState, getNextPhase, advancePhase, clearGate, setPendingSpawn, clearPendingSpawn } from '../harness/state';
 import { checkPhaseRules } from '../harness/rules';
 import { appendLedgerEvent } from '../harness/ledger';
 import { validateCheckpoint } from '../harness/checkpoints';
 import { trackToolCall, trackCheckpointValidation } from '../harness/ledger';
 import { HarnessPhase, PHASE_CHECKPOINT_FILES } from '../harness/types';
 import { isSteerCoGate, isAutoGate, invokeSteerCoReview, invokeGateAudit, spawnPhaseSession, generateGateReviewHtml } from '../harness/orchestrator';
-import { getNextPhase, advancePhase, clearGate } from '../harness/state';
 // Terminal PID is now resolved via the registry (populated by the launcher's
 // POST to /api/register-terminal). The getOrCreateSession() call auto-applies
 // the registry lookup, so no additional discovery logic is needed here.
@@ -74,6 +73,18 @@ function handleSessionStart(req: Request, res: Response): void {
 
   broadcastFn('session-added', sessionToDTO(session));
   broadcastFn('feed-event', feedEvent);
+
+  // CT-4: Clear pendingSpawn if any session starts for a project with a pending spawn.
+  // This covers manual session launches that bypass the orchestrator's spawn flow.
+  if (payload.cwd) {
+    const hState = loadHarnessState(payload.cwd);
+    if (hState && hState.harnessPendingSpawn) {
+      const pendingPhase = hState.harnessPendingSpawn.harnessPendingPhase;
+      console.log(`[SessionStart] Clearing pendingSpawn for ${payload.cwd} (session connected for ${pendingPhase} phase)`);
+      clearPendingSpawn(hState);
+      broadcastFn('pending-spawn-resolved', { projectPath: payload.cwd, phase: pendingPhase, manual: true });
+    }
+  }
 
   if (session.terminalPid) {
     console.log(`[SessionStart] ${session.name} (${session.id.substring(0, 8)}) → terminal PID ${session.terminalPid}`);
@@ -551,16 +562,23 @@ function handlePostToolUse(req: Request, res: Response): void {
             addFeedEvent(autoFeed);
             broadcastFn('feed-event', autoFeed);
 
+            // RISK-05: Set pendingSpawn BEFORE attempting spawn.
+            // If spawn fails, this flag stays set so reconciliation can detect it.
+            setPendingSpawn(advanced, nextPhase);
+
             // Spawn the next phase session
             spawnPhaseSession(advanced, nextPhase).then((result) => {
               if (result.success) {
+                clearPendingSpawn(advanced); // RISK-05: Spawn succeeded — clear flag
                 console.log(`[Harness] Next phase session spawned: ${nextPhase} (PID ${result.pid})`);
               } else {
+                // RISK-05: pendingSpawn remains set — dashboard will show stale spawn warning
                 console.log(`[Harness] Failed to spawn ${nextPhase} session: ${result.error}`);
                 broadcastFn('phase-session-failed', {
                   projectPath: session.project,
                   phase: nextPhase,
                   error: result.error,
+                  pendingSpawn: true, // RISK-05: Signal to dashboard
                 });
               }
             }).catch((err) => {

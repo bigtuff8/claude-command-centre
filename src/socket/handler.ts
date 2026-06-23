@@ -61,6 +61,22 @@ export function initSocketHandler(io: SocketServer): void {
       io.emit('session-removed', { sessionId: data.sessionId });
     });
 
+    // Handle bulk dismiss of all finished sessions
+    socket.on('dismiss-all-finished', () => {
+      const all = getAllSessions();
+      const dismissed: string[] = [];
+      for (const session of all) {
+        if (session.status === 'completed' || session.status === 'errored' || session.status === 'stopped') {
+          dismissed.push(session.id);
+          removeSession(session.id);
+        }
+      }
+      if (dismissed.length > 0) {
+        console.log(`[Dismiss] Bulk removed ${dismissed.length} finished sessions`);
+        io.emit('sessions-bulk-removed', { sessionIds: dismissed });
+      }
+    });
+
     // Handle new session launch from dashboard
     // viaLauncher: true  → open the launcher TUI in a new terminal (full project/harness selection)
     // viaLauncher: false → spawn directly via happy/claude CLI (quick launch)

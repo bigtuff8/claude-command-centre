@@ -43,6 +43,11 @@ export interface HarnessState {
   harnessReworkCycles: number;
   harnessOverrides: HarnessOverride[];
   harnessPaused: boolean;
+  harnessPendingSpawn?: {           // RISK-05: Set when advancePhase succeeds but spawnPhaseSession hasn't completed yet
+    harnessPendingPhase: HarnessPhase;
+    harnessPendingSetAt: string;
+    harnessPendingAttempts: number;
+  } | null;
   harnessCreatedAt: string;
   harnessUpdatedAt: string;
 }

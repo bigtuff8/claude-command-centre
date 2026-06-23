@@ -1,6 +1,6 @@
 // Harness Enforcement Engine — Public API
 
-export { loadHarnessState, saveHarnessState, createHarnessState, advancePhase, initiateRework, recordOverride, setHarnessPaused, clearGate, getNextPhase, resolveProjectPath } from './state';
+export { loadHarnessState, saveHarnessState, createHarnessState, advancePhase, initiateRework, recordOverride, setHarnessPaused, clearGate, getNextPhase, resolveProjectPath, setPendingSpawn, clearPendingSpawn, checkPendingSpawn } from './state';
 export { validateCheckpoint, readCheckpoint, isPreviousCheckpointValid } from './checkpoints';
 export { checkPhaseRules, getRequiredReads } from './rules';
 export { initLedger, appendLedgerEvent, readLedgerEvents, readProjectsSnapshot, readProjectEventLog, getMetrics, computeSuccessCriteria, trackToolCall, trackCheckpointValidation } from './ledger';

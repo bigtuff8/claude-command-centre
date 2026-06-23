@@ -13,6 +13,9 @@ import {
   recordOverride,
   setHarnessPaused,
   clearGate,
+  setPendingSpawn,
+  clearPendingSpawn,
+  checkPendingSpawn,
 } from '../harness/state';
 import { validateCheckpoint } from '../harness/checkpoints';
 import { getRequiredReads } from '../harness/rules';
@@ -56,6 +59,9 @@ export function createHarnessRouter(broadcast: (event: string, data: any) => voi
   router.get('/metrics', handleGetMetrics);
   router.get('/success-criteria', handleGetSuccessCriteria);
   router.get('/project-events/:projectPath(*)', handleGetProjectEvents);
+  // RISK-05 CT-2: Recovery endpoints for stale pendingSpawn
+  router.post('/retry-spawn', handleRetrySpawn);
+  router.post('/clear-pending-spawn', handleClearPendingSpawn);
 
   return router;
 }
@@ -331,7 +337,27 @@ function handleGetSummary(req: Request, res: Response): void {
     return;
   }
 
-  res.json(getHarnessSummary(state));
+  const summary = getHarnessSummary(state);
+
+  // RISK-05: Check for stale pendingSpawn and include in response
+  const pendingPhase = checkPendingSpawn(state);
+  if (pendingPhase) {
+    broadcastFn('pending-spawn-detected', {
+      projectPath: state.harnessProjectPath,
+      phase: pendingPhase,
+      setAt: state.harnessPendingSpawn?.harnessPendingSetAt,
+      attempts: state.harnessPendingSpawn?.harnessPendingAttempts,
+    });
+  }
+
+  res.json({
+    ...summary,
+    pendingSpawn: pendingPhase ? {
+      phase: pendingPhase,
+      setAt: state.harnessPendingSpawn?.harnessPendingSetAt,
+      attempts: state.harnessPendingSpawn?.harnessPendingAttempts,
+    } : null,
+  });
 }
 
 function handleTransitionReady(req: Request, res: Response): void {
@@ -602,17 +628,23 @@ function handleGateFeedback(req: Request, res: Response): void {
       });
 
       // F004: Spawn the next phase session after manual gate approval
+      // RISK-05: Set pendingSpawn before attempting spawn
       const freshState = loadHarnessState(projectPath!, workFolder);
       if (freshState) {
+        setPendingSpawn(freshState, result.nextPhase);
+
         spawnPhaseSession(freshState, result.nextPhase).then((spawnResult) => {
           if (spawnResult.success) {
+            clearPendingSpawn(freshState); // RISK-05: Spawn succeeded
             console.log(`[Gate] Spawned ${result.nextPhase} session (PID ${spawnResult.pid})`);
           } else {
+            // RISK-05: pendingSpawn remains set — reconciliation will catch it
             console.error(`[Gate] FAILED to spawn ${result.nextPhase}: ${spawnResult.error}`);
             broadcastFn('phase-session-failed', {
               projectPath,
               phase: result.nextPhase,
               error: spawnResult.error,
+              pendingSpawn: true,
             });
           }
         }).catch((err) => {
@@ -621,6 +653,7 @@ function handleGateFeedback(req: Request, res: Response): void {
             projectPath,
             phase: result.nextPhase,
             error: String(err),
+            pendingSpawn: true,
           });
         });
       }
@@ -652,4 +685,60 @@ function handleGateFeedback(req: Request, res: Response): void {
       total,
     });
   }
+}
+
+// RISK-05 CT-2: Retry a stale pending spawn
+async function handleRetrySpawn(req: Request, res: Response): Promise<void> {
+  const { projectPath } = req.body;
+  const workFolder = extractWorkFolder(req);
+  const state = loadHarnessState(projectPath, workFolder);
+
+  if (!state) {
+    res.status(404).json({ error: 'No harness active for this project' });
+    return;
+  }
+
+  if (!state.harnessPendingSpawn) {
+    res.status(400).json({ error: 'No pending spawn to retry' });
+    return;
+  }
+
+  const phase = state.harnessPendingSpawn.harnessPendingPhase;
+  setPendingSpawn(state, phase); // Update timestamp and increment attempts
+
+  try {
+    const result = await spawnPhaseSession(state, phase);
+    if (result.success) {
+      clearPendingSpawn(state);
+      broadcastFn('pending-spawn-resolved', { projectPath, phase, pid: result.pid });
+      res.json({ ok: true, phase, pid: result.pid });
+    } else {
+      broadcastFn('phase-session-failed', { projectPath, phase, error: result.error, pendingSpawn: true });
+      res.status(500).json({ error: `Retry failed: ${result.error}`, pendingSpawn: true });
+    }
+  } catch (err) {
+    res.status(500).json({ error: `Retry error: ${err}` });
+  }
+}
+
+// RISK-05 CT-2: Manually clear a stale pendingSpawn flag
+function handleClearPendingSpawn(req: Request, res: Response): void {
+  const { projectPath } = req.body;
+  const workFolder = extractWorkFolder(req);
+  const state = loadHarnessState(projectPath, workFolder);
+
+  if (!state) {
+    res.status(404).json({ error: 'No harness active for this project' });
+    return;
+  }
+
+  if (!state.harnessPendingSpawn) {
+    res.json({ ok: true, message: 'No pending spawn to clear' });
+    return;
+  }
+
+  const phase = state.harnessPendingSpawn.harnessPendingPhase;
+  clearPendingSpawn(state);
+  broadcastFn('pending-spawn-resolved', { projectPath, phase, manual: true });
+  res.json({ ok: true, cleared: phase });
 }
