@@ -1,12 +1,12 @@
 # Command Centre
 
 **Status:** Active
-**Last Active:** 2026-06-12
+**Last Active:** 2026-06-23
 **Quick Context:** Web dashboard for monitoring Claude Code sessions AND managing the full project portfolio — sessions, projects, risks, activity, audit. Windows-native, portable, shareable.
 
 ## Current State
 
-- **Version:** 0.3.0 (harness integrity fixes + lifecycle redesign)
+- **Version:** 0.4.0 (harness hardening — GAP-02, MISSED-01, RISK-05)
 - **GitHub:** `bigtuff8/claude-command-centre` (all commits pushed)
 - **Server:** Live on `0.0.0.0:4111`, auto-started by launcher + watchdog on boot
 - **Auto-update:** On boot, pulls latest from GitHub, rebuilds if needed, then starts watchdog
@@ -53,7 +53,17 @@ Global permission bar visible on all tabs. Consistent filter row frame across al
 - **Layer 3 — PreToolUse enforcement:** Denies tool calls that violate phase rules. `mustReadBefore` (must read agent prompt before writing), `blockWrite` (no code in init/design/test), `blockBash` (no commit in init, no push with failing tests), `requireCheckpoint` (previous phase must be complete).
 - **Layer 4 — Phase orchestrator:** Generates context-rich prompts per phase, validates transition readiness, executes phase advances via REST API.
 
-API endpoints: `/api/harness/status`, `/create`, `/advance`, `/regress`, `/transition`, `/override`, `/pause`, `/gate/clear`, `/sessions/spawn`, `/ledger`, `/projects`, `/summary`, `/transition-ready`, `/phase-prompt`, `/validate`, `/metrics`, `/success-criteria`, `/health`
+API endpoints: `/api/harness/status`, `/create`, `/advance`, `/regress`, `/transition`, `/override`, `/pause`, `/gate/clear`, `/sessions/spawn`, `/ledger`, `/projects`, `/summary`, `/transition-ready`, `/phase-prompt`, `/validate`, `/metrics`, `/success-criteria`, `/health`, `/retry-spawn`, `/clear-pending-spawn`
+
+### Harness Hardening (v0.4.0)
+
+From the harness infrastructure audit (2026-06-15), 3 approved fixes + CT-driven remediations:
+
+- **GAP-02 (Standards enforcement):** `mustReadBefore` rules for `.claude-docs/` standards. `security-standards.md` mandatory for Airedale dev phase. `sql-standards.md` and `cosmosdb-standards.md` conditional on project tech stack (scans project root for `.sql`/`.csproj` files). Violation messages include `.claude-docs/` path hints.
+- **MISSED-01 (Prompt flattening):** Confirmed flattening required (cmd.exe limitation). Compensating control: writes unflattened prompt to `.harness/phase-prompt.md`. `mustReadBefore` rule ensures agents read the structured version.
+- **RISK-05 (Spawn failure recovery):** `harnessPendingSpawn` flag on HarnessState. Set before spawn, cleared on success. Recovery endpoints: `POST /api/harness/retry-spawn`, `POST /api/harness/clear-pending-spawn`. Any session connecting auto-clears pendingSpawn for that project.
+- **UI: Bulk session dismiss** — "Clear finished" button in sidebar header removes all completed/errored/stopped sessions at once.
+- **CT remediations:** Tech-stack detection scans project root not work folder; `clearPendingSpawn` reloads from disk to avoid stale writes; manual session connects clear pendingSpawn.
 
 ### Harness Integrity Fixes (v0.3.0)
 
@@ -158,4 +168,5 @@ The enforcement engine was built (v0.4.0) but had no activation path — the lau
 | 2026-05-08 | **Launcher → Enforcement Wiring.** Identified activation gap: enforcement engine was built but the launcher never called `POST /api/harness/create` to create `.harness/harness-state.json`, so enforcement was silently skipped for all sessions. Fix applied in the launcher repo (`claude-workspace/launcher/`): `initHarnessEnforcement()` added to `command-centre.ts`, `mode` added to `HarnessSelection`, wired into `launchClaude()`. Verified end-to-end: API creates state file, status endpoint detects it, enforcement hooks read it. No changes to Command Centre code — fix was entirely in the launcher's integration layer. |
 | 2026-05-13 | **Bug fixes.** (1) Portfolio "New Session" button (top metrics bar) only switched to Sessions tab but never opened the modal — fixed to call `openNewSession()` inside the sessions iframe. (2) Auto-approve leaking: `autoPassTools` (Read, Glob, Grep, WebSearch, WebFetch) returned empty `{}` response instead of explicit `allow` decision, causing Claude Code to fall back to its own permission prompting for WebSearch/WebFetch. Fixed to return `permissionDecision: 'allow'` for all auto-pass tools. |
 | 2026-06-12 | **Harness Integrity Fixes (v0.3.0).** Full build harness session: 13 features + 7 rework items. Checkpoint deadlock prevention (advancePhase validates before advancing), backward phase movement (regressPhase + /regress API), blockWrite for harness-state.json, session spawn API with rate limiting and fallback, gate validation, enforcement scope fix, escapeCmdArg fix, monitoring KPIs. CT post-test review found 1 real bug (fallback escape), 1 metric design flaw, 1 spec deviation — all fixed in rework cycle. Live demonstration of backward-movement gap (Tester blocked, James had to edit JSON) validated the need for regressPhase(). 25 files changed, 1186 insertions. Pushed to GitHub. |
+| 2026-06-23 | **Harness Hardening (v0.4.0).** 3 approved audit fixes: GAP-02 (standards mustReadBefore enforcement for security/SQL/Cosmos based on tech stack), MISSED-01 (prompt flattening — confirmed cmd.exe limitation, writes formatted version to phase-prompt.md), RISK-05 (pendingSpawn flag with retry/clear endpoints and auto-clear on session connect). CT review found 6 issues (2 critical, 4 important) — all fixed in same session. Added bulk session dismiss UI. 12 files changed, 339 insertions. |
 | 2026-06-04 | **Work folder isolation bug fix.** Post-redesign pilot revealed two bugs preventing work folder isolation from working: (1) Launcher's `initHarnessEnforcement()` called `/api/harness/status/:path` without `?workFolder=xxx`, finding stale project-root state from previous sessions and returning `active: true` — skipping the `POST /api/harness/create` call entirely. Fixed to pass workFolder param and detect stale project-root state. (2) Session `workFolderPath` auto-resolution only checked project-root harness state (which had null `harnessWorkFolder`). Added work folder registry (in-memory map populated by `POST /api/harness/create`) so sessions resolve their work folder immediately. Files changed: `routes/harness.ts` (register work folder on create), `state/sessions.ts` (work folder registry + improved auto-resolution). Launcher fix in `command-centre.ts`. |
