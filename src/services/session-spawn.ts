@@ -85,9 +85,14 @@ export async function spawnHappySession(
   // Build arguments
   const args: string[] = [];
 
-  if (isHappy && options.displayName) {
-    args.push('--display-name', options.displayName);
-  }
+  // WS3 (2026-07-03): Do NOT pass --display-name to Happy. After the WS1 upstream
+  // upgrade, upstream Happy has no such flag — it forwards unknown flags to claude,
+  // which hard-errors ("unknown option '--display-name'") and the spawned session dies.
+  // This was the actual cause of interactive handoff being broken. The Happy app derives
+  // a session's label from its AI summary (getSessionName) and ignores metadata.name, so a
+  // custom session name needs an app-side feature (see 2026-07-03T-tooling-discovery/
+  // followup-spec-session-naming.md), NOT a CLI flag. `options.displayName` is retained
+  // below for CC-internal tracking/logging/broadcast only.
 
   if (options.systemPrompt) {
     // MISSED-01: Newlines MUST be flattened for --append-system-prompt on Windows.
