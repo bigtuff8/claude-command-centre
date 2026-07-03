@@ -475,6 +475,20 @@ function evaluateRule(
 
       const result = isPreviousCheckpointValid(state);
       if (!result.valid) {
+        // Deadlock-prevention: if a phase is entered with an invalid prior checkpoint
+        // (e.g. after a manual state edit, or an invalid checkpoint that never advanced),
+        // blocking EVERY mutating tool also blocks the edits needed to REPAIR the
+        // checkpoint — an unrecoverable lockout. Allow Write/Edit targeting the work
+        // folder / .harness so the agent can fix the invalid artefacts (code-audit.md,
+        // feature-list.json, the checkpoint itself). Production code (src/**) remains
+        // blocked by its own blockWrite rule.
+        if ((toolName === 'Write' || toolName === 'Edit') && toolInput.file_path) {
+          const target = normalisePath(String(toolInput.file_path));
+          const baseNorm = normalisePath(base);
+          if (target === baseNorm || target.startsWith(baseNorm + '/') || target.includes('/.harness/')) {
+            return null; // recovery write within the work folder — allow
+          }
+        }
         return {
           violationRule: `requireCheckpoint:${rule.ruleCheckpoint}`,
           violationReason: `Phase "${state.harnessCurrentPhase}" requires a valid ${rule.ruleCheckpoint}. Errors: ${result.errors.join('; ')}`,

@@ -209,14 +209,19 @@ function validatePhaseSpecific(
         errors.push('Dev checkpoint: code-audit.md does not exist. Run the mandatory code audit.');
       } else {
         const auditContent = fs.readFileSync(codeAuditPath, 'utf-8');
-        const requiredChecks = [
-          'Functions defined but never called',
-          'Dead code',
-          'Secrets or credentials',
+        // Tolerant matching: each mandatory audit topic is satisfied by ANY of its
+        // accepted phrasings (case-insensitive regex), not a single exact string.
+        // Avoids brittle rejection of semantically-identical wording — e.g.
+        // "Secrets / credentials" vs "Secrets or credentials" (the exact bug that
+        // silently invalidated a dev checkpoint and stalled a dev→test handoff).
+        const requiredChecks: { label: string; pattern: RegExp }[] = [
+          { label: 'Functions defined but never called', pattern: /defined but never called|never called|unused (function|code|export|method)/i },
+          { label: 'Dead code', pattern: /dead code|unused (function|code|export|method)|unreachable/i },
+          { label: 'Secrets or credentials', pattern: /secret|credential|api[\s_-]?key|hardcoded token|password/i },
         ];
         for (const check of requiredChecks) {
-          if (!auditContent.toLowerCase().includes(check.toLowerCase())) {
-            errors.push(`Dev checkpoint: code-audit.md missing mandatory check: "${check}"`);
+          if (!check.pattern.test(auditContent)) {
+            errors.push(`Dev checkpoint: code-audit.md missing mandatory check: "${check.label}"`);
           }
         }
       }

@@ -408,8 +408,10 @@ function handlePostToolUse(req: Request, res: Response): void {
   broadcastFn('session-updated', sessionToDTO(session));
   broadcastFn('feed-event', feedEvent);
 
-  // F005: Detect checkpoint writes — trigger gate workflow
-  if (toolName === 'Write' && toolInput.file_path) {
+  // F005: Detect checkpoint writes — trigger gate workflow.
+  // Detect Edit as well as Write: agents frequently re-touch a checkpoint via Edit
+  // (e.g. bumping the timestamp to re-trigger validation), and those must re-validate.
+  if ((toolName === 'Write' || toolName === 'Edit') && toolInput.file_path) {
     const filePath = String(toolInput.file_path);
     const checkpointMatch = filePath.match(/\.harness[/\\]checkpoint-(\w+)\.json$/);
     if (checkpointMatch) {
@@ -456,6 +458,20 @@ function handlePostToolUse(req: Request, res: Response): void {
         };
         addFeedEvent(checkpointFeed);
         broadcastFn('feed-event', checkpointFeed);
+
+        // Fail loud: surface an INVALID checkpoint back to the writing agent, not
+        // just the dashboard. Previously the agent got no signal — the Write tool
+        // succeeded, no error surfaced, and the phase silently failed to advance.
+        // Returning the errors here means the agent sees exactly why and can fix it.
+        if (!isValid) {
+          res.json({
+            decision: 'block',
+            reason:
+              `[HARNESS] Checkpoint for "${phase}" phase was written but is INVALID — it was NOT accepted and the phase will not advance. `
+              + `Fix the following, then re-write the checkpoint:\n- ${errors.join('\n- ')}`,
+          });
+          return;
+        }
 
         // Determine gate type for this transition
         const nextPhase = getNextPhase(harnessState);
