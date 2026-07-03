@@ -418,7 +418,15 @@ function handlePostToolUse(req: Request, res: Response): void {
       const phase = checkpointMatch[1] as HarnessPhase;
       const postSessionWorkFolder = session.workFolderPath || null;
       const harnessState = loadHarnessState(session.project, postSessionWorkFolder);
-      if (harnessState) {
+      // A paused harness must NEVER gate a checkpoint. Without this, a stale, paused harness left
+      // in the project-root .harness/ hijacks an active run's checkpoint validation: on 2026-07-03 a
+      // paused 'integration' harness at the root (harnessWorkFolder=null) validated a 'build' run's
+      // test checkpoint and misrouted the gate as test→research. loadHarnessState falls back to the
+      // root state when the session's workFolder is unavailable, so guard here — mirrors rules.ts,
+      // which already returns null (no enforcement) when the resolved harness is paused.
+      if (harnessState && harnessState.harnessPaused) {
+        console.log(`[Harness] Checkpoint ${phase} ignored — resolved harness (${harnessState.harnessType}, phase ${harnessState.harnessCurrentPhase}) is paused; a paused harness does not gate another run.`);
+      } else if (harnessState) {
         const errors = validateCheckpoint(harnessState, phase);
         const isValid = errors.length === 0;
 
