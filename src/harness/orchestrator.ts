@@ -499,6 +499,7 @@ export async function spawnPhaseSession(
         projectPath: cwd,
         displayName,
         systemPrompt: prompt,
+        initialMessage: `Begin the ${phase} phase. Read all mandatory prerequisites listed in your system prompt, then start working autonomously.`,
         workFolderPath: state.harnessWorkFolder || undefined,
         harnessContext: {
           type: state.harnessType,
