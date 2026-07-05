@@ -40,6 +40,14 @@ export function buildPhasePrompt(state: HarnessState, phase: HarnessPhase): stri
   const previousCheckpoint = previousPhase ? PHASE_CHECKPOINT_FILES[previousPhase] : null;
   const requiredReads = getRequiredReads(state.harnessType, phase, state.harnessMode);
 
+  // Absolute harness-asset paths. A spawned session's cwd is the PROJECT folder, NOT the
+  // Claude Agents folder, so bare relative paths like `agents/designer.md` fail to resolve
+  // and the session stalls at its mandatory first read. Anchor to the Command Centre's own
+  // location: <...>/Claude Agents/Command Centre/dist/harness -> up 3 = <...>/Claude Agents.
+  const claudeAgentsRoot = path.resolve(__dirname, '..', '..', '..');
+  const agentFileAbs = path.join(claudeAgentsRoot, agentFile);
+  const standardsDir = path.resolve(claudeAgentsRoot, '..', '..', '.claude', '.claude-docs');
+
   const wf = state.harnessWorkFolder;
   const lines: string[] = [
     `You are entering the **${phase}** phase of the **${state.harnessType}** harness.`,
@@ -48,6 +56,8 @@ export function buildPhasePrompt(state: HarnessState, phase: HarnessPhase): stri
     `MODE: ${state.harnessMode}`,
     `HARNESS: ${state.harnessType}`,
     `PHASE: ${phase}`,
+    `AGENTS & HARNESS SPECS LOCATION: ${claudeAgentsRoot}`,
+    `  (agent prompts under agents/, harness specs under harnesses/ — use the absolute paths given below)`,
   ];
 
   // Work folder context (DR-06)
@@ -76,8 +86,8 @@ export function buildPhasePrompt(state: HarnessState, phase: HarnessPhase): stri
     step++;
   }
 
-  // Agent prompt is always first
-  lines.push(`${step}. Read the agent prompt: \`${agentFile}\``);
+  // Agent prompt is always first (absolute path — session cwd is the project folder)
+  lines.push(`${step}. Read the agent prompt: \`${agentFileAbs}\``);
   step++;
 
   // Feature list (work-folder aware)
@@ -113,7 +123,7 @@ export function buildPhasePrompt(state: HarnessState, phase: HarnessPhase): stri
   }
 
   if (phase === 'test') {
-    lines.push(`${step}. Read the testing standards: \`.claude-docs/testing-standards.md\``);
+    lines.push(`${step}. Read the testing standards: \`${path.join(standardsDir, 'testing-standards.md')}\``);
     step++;
   }
 
