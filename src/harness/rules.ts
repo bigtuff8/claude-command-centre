@@ -502,12 +502,17 @@ function evaluateRule(
         try {
           if (fs.existsSync(featureListPath)) {
             const fl = JSON.parse(fs.readFileSync(featureListPath, 'utf-8'));
-            const failing = (fl.features || []).filter((f: any) => !f.passes);
+            // P4/R-IMG-3: a feature blocks release only if it is neither passing NOR
+            // explicitly deferred. `status: "deferred"` lets post-deployment / human
+            // follow-up work (e.g. F007 release execution, F008 scope-confirm) be
+            // honestly recorded as passes:false without lying with passes:true just to
+            // clear the gate. Features with no `status` behave exactly as before.
+            const failing = (fl.features || []).filter((f: any) => !f.passes && f.status !== 'deferred');
             if (failing.length > 0) {
               return {
                 violationRule: `requireCheckpoint:allPass`,
-                violationReason: `Release phase requires all features passing. ${failing.length} feature(s) still failing: ${failing.map((f: any) => f.id).join(', ')}`,
-                violationFix: 'Update feature-list.json — all features must have passes: true before release.',
+                violationReason: `Release phase requires every feature to be passing or deferred. ${failing.length} feature(s) still failing: ${failing.map((f: any) => f.id).join(', ')}`,
+                violationFix: 'For each: set passes: true once verified, OR set status: "deferred" (with passes:false) for post-deployment/follow-up work intentionally not executed in this phase.',
               };
             }
           }
