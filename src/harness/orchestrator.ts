@@ -662,6 +662,29 @@ export function generateGateReviewHtml(
     });
   }
 
+  // P4 / R-HARN-3: surface DEFERRED features at the gate. A deferred feature is being
+  // released WITHOUT verification (post-deployment / human follow-up), so the human
+  // approver must see exactly what — and why — before approving, rather than it being
+  // an invisible boolean in feature-list.json.
+  try {
+    const flPath = path.join(artefactBase, 'feature-list.json');
+    if (fs.existsSync(flPath)) {
+      const fl = JSON.parse(fs.readFileSync(flPath, 'utf-8'));
+      const esc = (s: string) => String(s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const deferred = (fl.features || []).filter((f: any) => f.status === 'deferred');
+      if (deferred.length > 0) {
+        const rows = deferred.map((f: any) =>
+          `<li><strong>${esc(f.id)}</strong> — ${esc(f.description)}<br><em>Deferred because:</em> ${esc(f.notes || '(no note — this should have blocked the gate)')}</li>`
+        ).join('');
+        sections.push({
+          id: 'deferred-features',
+          title: `⚠ Deferred Features (${deferred.length}) — released WITHOUT verification`,
+          content: `<p>These features are being released as <strong>deferred</strong> (post-deployment or human follow-up). They are <strong>not verified</strong>. Confirm you accept this before approving.</p><ul>${rows}</ul>`,
+        });
+      }
+    }
+  } catch { /* skip — feature list optional/parse error */ }
+
   // Generate the HTML
   const sectionIds = sections.map(s => `'${s.id}'`).join(',');
   const sectionsHtml = sections.map(s => `

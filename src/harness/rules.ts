@@ -502,17 +502,26 @@ function evaluateRule(
         try {
           if (fs.existsSync(featureListPath)) {
             const fl = JSON.parse(fs.readFileSync(featureListPath, 'utf-8'));
-            // P4/R-IMG-3: a feature blocks release only if it is neither passing NOR
-            // explicitly deferred. `status: "deferred"` lets post-deployment / human
-            // follow-up work (e.g. F007 release execution, F008 scope-confirm) be
-            // honestly recorded as passes:false without lying with passes:true just to
-            // clear the gate. Features with no `status` behave exactly as before.
-            const failing = (fl.features || []).filter((f: any) => !f.passes && f.status !== 'deferred');
+            // P4/R-IMG-3 + R-HARN-3: a feature clears the release gate only if it is
+            // passing, OR explicitly deferred WITH a non-empty note. `status: "deferred"`
+            // lets post-deployment / human follow-up work (e.g. F007 release execution,
+            // F008 scope-confirm) be honestly recorded as passes:false without lying with
+            // passes:true. The mandatory note stops a genuine failure hiding behind an
+            // unexplained "deferred" — the reviewer sees WHY it was deferred. Features with
+            // no `status` behave exactly as before (must pass).
+            const isCleared = (f: any) =>
+              f.passes ||
+              (f.status === 'deferred' && typeof f.notes === 'string' && f.notes.trim().length > 0);
+            const failing = (fl.features || []).filter((f: any) => !isCleared(f));
             if (failing.length > 0) {
+              const undocumentedDeferrals = failing.filter((f: any) => f.status === 'deferred');
+              const noteHint = undocumentedDeferrals.length > 0
+                ? ` (${undocumentedDeferrals.map((f: any) => f.id).join(', ')} are marked deferred but have an empty note — a deferred feature MUST explain why in "notes")`
+                : '';
               return {
                 violationRule: `requireCheckpoint:allPass`,
-                violationReason: `Release phase requires every feature to be passing or deferred. ${failing.length} feature(s) still failing: ${failing.map((f: any) => f.id).join(', ')}`,
-                violationFix: 'For each: set passes: true once verified, OR set status: "deferred" (with passes:false) for post-deployment/follow-up work intentionally not executed in this phase.',
+                violationReason: `Release phase requires every feature to be passing, or deferred with a note. ${failing.length} feature(s) not cleared: ${failing.map((f: any) => f.id).join(', ')}${noteHint}`,
+                violationFix: 'For each: set passes: true once verified, OR status: "deferred" with a non-empty "notes" explaining why it is deferred (post-deployment/follow-up work not executed in this phase).',
               };
             }
           }

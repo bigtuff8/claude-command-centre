@@ -2,6 +2,7 @@
 // Dashboard endpoints for harness status, phase control, and overrides
 
 import * as path from 'path';
+import * as fs from 'fs';
 import { Router, Request, Response } from 'express';
 import {
   loadHarnessState,
@@ -16,6 +17,7 @@ import {
   setPendingSpawn,
   clearPendingSpawn,
   checkPendingSpawn,
+  getArtefactBasePath,
 } from '../harness/state';
 import { validateCheckpoint } from '../harness/checkpoints';
 import { getRequiredReads } from '../harness/rules';
@@ -136,6 +138,17 @@ function handleAdvance(req: Request, res: Response): void {
     res.status(400).json({ error: result.error || 'Cannot advance phase' });
     return;
   }
+
+  // P3: regenerate .harness/phase-prompt.md for the new phase. Previously the prompt was
+  // written ONLY by session-spawn.ts on spawn, so a bare advance (this route, incl. the
+  // Repair force-advance) left phase-prompt.md showing the OLD phase — a continuing/spawned
+  // session could then read the wrong brief. Keep prompt ↔ state in sync at the advance site.
+  try {
+    const newPhase = result.state.harnessCurrentPhase;
+    const promptDir = path.join(getArtefactBasePath(result.state), '.harness');
+    fs.mkdirSync(promptDir, { recursive: true });
+    fs.writeFileSync(path.join(promptDir, 'phase-prompt.md'), buildPhasePrompt(result.state, newPhase), 'utf-8');
+  } catch { /* non-fatal — spawn will still write the prompt on the normal path */ }
 
   broadcastFn('harness-phase-advanced', {
     projectPath,
