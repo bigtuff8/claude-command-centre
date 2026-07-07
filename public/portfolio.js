@@ -1743,12 +1743,15 @@ function renderHarnessMetrics(m, criteria) {
   var gates = el('hm-gates');
   var phases = el('hm-phases');
   var overrides = el('hm-overrides');
+  var manualOverrides = el('hm-manual-overrides');
 
   if (compliance) compliance.textContent = criteria.phaseComplianceRate !== null ? criteria.phaseComplianceRate + '%' : '--';
   if (violations) violations.textContent = m.metricsViolations || 0;
   if (gates) gates.textContent = m.metricsGatesCleared || 0;
   if (phases) phases.textContent = m.metricsPhaseCompletions || 0;
   if (overrides) overrides.textContent = m.metricsOverrides || 0;
+  // R-HARN-5: manual gate bypasses via the Repair control (distinct from generic overrides)
+  if (manualOverrides) manualOverrides.textContent = m.metricsRepairOverrides || 0;
 }
 
 function renderHarnessGrid(projects) {
@@ -1787,6 +1790,8 @@ function renderHarnessGrid(projects) {
     var gatesCleared = (p.snapshotGatesCleared || []).length;
     var gatesPending = (p.snapshotGatesPending || []).length;
     var projectName = p.snapshotProjectName || p.snapshotProjectPath.split(/[/\\]/).pop();
+    var pathAttr = escapeHtml(p.snapshotProjectPath);
+    var wfAttr = escapeHtml(p.snapshotWorkFolder || '');
 
     // G014: Active rules for current phase
     var rulesHtml = '';
@@ -1797,12 +1802,27 @@ function renderHarnessGrid(projects) {
       '</div>';
     }
 
-    return '<div class="glass harness-card">' +
+    // R-HARN-5: persistent manual-override badge (durable trace, not just a ledger line)
+    var overrideBadge = '';
+    if (p.snapshotManualOverride) {
+      var mo = p.snapshotManualOverride;
+      var moLabel = (mo.gate ? mo.gate : ((mo.fromPhase || '') + (mo.toPhase ? '→' + mo.toPhase : ''))) || 'gate';
+      overrideBadge = '<div class="override-badge" title="R-HARN-5: persistent override trace">' +
+        '&#9888; ' + escapeHtml(moLabel) + ' manually overridden' +
+        (mo.reason ? ' &middot; &ldquo;' + escapeHtml(truncate(mo.reason, 60)) + '&rdquo;' : '') +
+        ' &middot; ' + formatDate(mo.at) +
+        (p.snapshotManualOverrideCount > 1 ? ' (' + p.snapshotManualOverrideCount + ')' : '') +
+      '</div>';
+    }
+
+    return '<div class="glass harness-card" data-path="' + pathAttr + '" data-workfolder="' + wfAttr + '">' +
       '<div class="harness-card-header">' +
-        '<strong>' + projectName + '</strong>' +
-        '<span style="color:' + statusColor + ';font-size:.8rem;font-weight:600">' + statusLabel + '</span>' +
+        '<strong>' + escapeHtml(projectName) + '</strong>' +
+        '<span style="color:' + statusColor + ';font-size:.8rem;font-weight:600">' + escapeHtml(statusLabel) + '</span>' +
       '</div>' +
       '<div class="harness-phase-bar">' + phaseBar + '</div>' +
+      '<div class="gate-banner-slot"></div>' +
+      overrideBadge +
       '<div class="harness-card-meta">' +
         '<span title="Harness type">' + p.snapshotHarness + '</span>' +
         '<span title="Mode">' + p.snapshotMode + '</span>' +
@@ -1812,13 +1832,57 @@ function renderHarnessGrid(projects) {
         (overrides > 0 ? '<span style="color:var(--rose)" title="Overrides">' + overrides + ' overrides</span>' : '') +
       '</div>' +
       rulesHtml +
-      '<div style="margin-top:6px;display:flex;gap:8px;">' +
-        '<button class="btn btn-sm harness-pause-btn" data-path="' + p.snapshotProjectPath.replace(/"/g, '&quot;') + '" style="font-size:.75rem;">' +
+      '<div class="card-toolbar">' +
+        '<button class="btn btn-sm harness-pause-btn" data-path="' + pathAttr + '" style="font-size:.75rem;">' +
           (p.snapshotIsComplete ? 'Complete' : isPaused ? 'Resume' : 'Pause') +
         '</button>' +
+        '<button class="btn btn-sm repair-btn" data-path="' + pathAttr + '" data-workfolder="' + wfAttr + '" title="Corruption / stuck recovery — logged + confirmed">&#9855; Repair</button>' +
       '</div>' +
     '</div>';
   }).join('');
+
+  // State A/B gate banners depend on server-only GATE_CONFIG — hydrate them async.
+  hydrateGateBanners();
+}
+
+// P1: For each rendered card, fetch read-only gate status and inject the amber gate banner
+// (State A = review ready, State B = no review yet). No banner when there is no manual gate.
+function hydrateGateBanners() {
+  var grid = el('harnessGrid');
+  if (!grid) return;
+  var cards = grid.querySelectorAll('.harness-card[data-path]');
+  cards.forEach(function (card) {
+    var projectPath = card.getAttribute('data-path');
+    var workFolder = card.getAttribute('data-workfolder') || '';
+    var slot = card.querySelector('.gate-banner-slot');
+    if (!slot) return;
+    var url = '/api/harness/gate-status/' + encodeURIComponent(projectPath) +
+      (workFolder ? '?workFolder=' + encodeURIComponent(workFolder) : '');
+    fetch(url).then(function (r) { return r.json(); }).then(function (gs) {
+      if (!gs || !gs.active || !gs.isManualGate || gs.gateCleared || !gs.checkpointValid) {
+        slot.innerHTML = '';
+        return;
+      }
+      var gateLabel = (gs.phase || '') + ' → ' + (gs.nextPhase || '') + ' gate';
+      var top, sub, actions;
+      if (gs.hasReview) {
+        // State A — review ready
+        sub = 'Review ready · opens in the dashboard · audit/SteerCo included if generated';
+        actions = '<button class="btn btn-primary btn-sm gate-review-btn">Review &amp; approve</button>' +
+                  '<button class="btn btn-sm gate-review-btn" data-refresh="1">Regenerate</button>';
+      } else {
+        // State B — no generated review doc; the modal still renders from on-disk artefacts
+        sub = 'Checkpoint valid, no generated review doc — review is built from on-disk artefacts.';
+        actions = '<button class="btn btn-primary btn-sm gate-review-btn">Review &amp; approve</button>';
+      }
+      top = '<span class="gate-dot"></span>' + escapeHtml(gateLabel) + ' · awaiting your approval';
+      slot.innerHTML = '<div class="gate-banner">' +
+        '<div class="gate-banner-top">' + top + '</div>' +
+        '<div class="gate-sub">' + escapeHtml(sub) + '</div>' +
+        '<div class="gate-actions">' + actions + '</div>' +
+      '</div>';
+    }).catch(function () { slot.innerHTML = ''; });
+  });
 }
 
 function getPhaseSequence(harnessType) {
@@ -1865,6 +1929,323 @@ document.addEventListener('click', function (e) {
       fetchHarnessData();
     }
   }).catch(function (err) { console.error('[Harness] Pause error:', err); });
+});
+
+// ===== P1: In-dashboard gate approval modal + Repair control =====
+
+// Minimal scrim-modal helper. Returns { scrim, body, foot, close }.
+// All caller-supplied content nodes are DOM nodes (built with textContent) so agent/file-derived
+// text can never inject markup into the dashboard origin.
+function buildModalShell(titleText, dotColor) {
+  var scrim = document.createElement('div');
+  scrim.className = 'modal-scrim';
+  var modal = document.createElement('div');
+  modal.className = 'modal';
+  var head = document.createElement('div');
+  head.className = 'modal-head';
+  var dot = document.createElement('span');
+  dot.className = 'gate-dot';
+  if (dotColor) { dot.style.background = dotColor; dot.style.boxShadow = 'none'; }
+  var h3 = document.createElement('h3');
+  h3.textContent = titleText;
+  var x = document.createElement('button');
+  x.className = 'modal-x';
+  x.innerHTML = '&times;';
+  head.appendChild(dot); head.appendChild(h3); head.appendChild(x);
+  var body = document.createElement('div');
+  body.className = 'modal-body';
+  var foot = document.createElement('div');
+  foot.className = 'modal-foot';
+  modal.appendChild(head); modal.appendChild(body); modal.appendChild(foot);
+  scrim.appendChild(modal);
+
+  function close() { if (scrim.parentNode) scrim.parentNode.removeChild(scrim); }
+  x.addEventListener('click', close);
+  scrim.addEventListener('click', function (e) { if (e.target === scrim) close(); });
+  document.body.appendChild(scrim);
+  return { scrim: scrim, body: body, foot: foot, close: close };
+}
+
+// ---- Embedded Review & Approve modal (CR-03: same-origin, from gate-sections JSON) ----
+function openApproveModal(projectPath, workFolder) {
+  var url = '/api/harness/gate-sections/' + encodeURIComponent(projectPath) +
+    (workFolder ? '?workFolder=' + encodeURIComponent(workFolder) : '');
+  fetch(url).then(function (r) {
+    return r.json().then(function (data) { return { ok: r.ok, data: data }; });
+  }).then(function (res) {
+    if (!res.ok) { showToast(res.data && res.data.error ? res.data.error : 'Could not load gate review'); return; }
+    var gs = res.data;
+    var shell = buildModalShell((gs.phase + ' → ' + gs.nextPhase + ' gate — ' + gs.project));
+    var decisions = {};
+
+    var frame = document.createElement('div');
+    frame.className = 'review-frame';
+    (gs.sections || []).forEach(function (sec) {
+      var row = document.createElement('div');
+      row.className = 'rsec';
+      var left = document.createElement('div');
+      left.style.flex = '1';
+      var title = document.createElement('div');
+      title.className = 'rsec-title';
+      title.textContent = sec.title;
+      var text = document.createElement('div');
+      text.className = 'rsec-text';
+      text.textContent = sec.text || '';           // textContent — no HTML injection
+      left.appendChild(title); left.appendChild(text);
+      var pills = document.createElement('div');
+      pills.className = 'rsec-decisions';
+      ['approve', 'amend', 'reject'].forEach(function (d) {
+        var b = document.createElement('button');
+        b.className = 'rpill-btn';
+        b.textContent = d;
+        b.addEventListener('click', function () {
+          decisions[sec.id] = d;
+          pills.querySelectorAll('.rpill-btn').forEach(function (pb) {
+            pb.className = 'rpill-btn';
+          });
+          b.className = 'rpill-btn sel-' + d;
+        });
+        pills.appendChild(b);
+      });
+      row.appendChild(left); row.appendChild(pills);
+      frame.appendChild(row);
+    });
+    shell.body.appendChild(frame);
+
+    var commentWrap = document.createElement('div');
+    commentWrap.style.marginTop = '14px';
+    var commentLabel = document.createElement('label');
+    commentLabel.style.cssText = 'font-size:12px;color:var(--text-secondary);font-weight:600';
+    commentLabel.textContent = 'Comment (optional)';
+    var comment = document.createElement('textarea');
+    comment.className = 'reason';
+    comment.placeholder = 'Any notes for the record…';
+    commentWrap.appendChild(commentLabel); commentWrap.appendChild(comment);
+    shell.body.appendChild(commentWrap);
+
+    function submit(sectionDecisions) {
+      var feedback = {
+        reviewType: gs.reviewType,
+        project: gs.project,
+        projectPath: gs.projectPath,
+        workFolder: gs.workFolder || '',
+        checkpointHash: gs.checkpointHash || null,
+        timestamp: new Date().toISOString(),
+        sections: {},
+      };
+      (gs.sections || []).forEach(function (sec) {
+        feedback.sections[sec.id] = {
+          decision: sectionDecisions[sec.id] || 'not-reviewed',
+          comment: comment.value.trim(),
+        };
+      });
+      approveBtn.disabled = submitBtn.disabled = rejectBtn.disabled = true;
+      fetch('/api/gate/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(feedback),
+      }).then(function (r) {
+        return r.json().then(function (body) { return { status: r.status, body: body }; });
+      }).then(function (resp) {
+        if (resp.status === 409 && resp.body.reReview) {
+          showToast('Checkpoint changed since review — re-review required.');
+          shell.close();
+          fetchHarnessData();
+          return;
+        }
+        if (!resp.body || resp.body.ok === false) {
+          showToast(resp.body && resp.body.error ? resp.body.error : 'Gate submission failed');
+          approveBtn.disabled = submitBtn.disabled = rejectBtn.disabled = false;
+          return;
+        }
+        if (resp.body.duplicate) {
+          showToast('Approval already in progress.');
+        } else if (resp.body.decision === 'approved') {
+          showToast(resp.body.nextPhase ? 'Approved — advancing to ' + resp.body.nextPhase : 'Approved');
+        } else {
+          showToast('Feedback submitted (' + (resp.body.decision || 'needs-work') + ')');
+        }
+        shell.close();
+        fetchHarnessData();
+      }).catch(function (err) {
+        showToast('Gate submission error: ' + err);
+        approveBtn.disabled = submitBtn.disabled = rejectBtn.disabled = false;
+      });
+    }
+
+    var approveBtn = document.createElement('button');
+    approveBtn.className = 'btn btn-success';
+    approveBtn.textContent = 'Approve all → advance to ' + gs.nextPhase;
+    approveBtn.addEventListener('click', function () {
+      var all = {};
+      (gs.sections || []).forEach(function (sec) { all[sec.id] = 'approve'; });
+      submit(all);
+    });
+
+    var submitBtn = document.createElement('button');
+    submitBtn.className = 'btn';
+    submitBtn.textContent = 'Submit with per-section decisions';
+    submitBtn.addEventListener('click', function () {
+      // Unset sections default to approve; any amend/reject makes it needs-work server-side.
+      var d = {};
+      (gs.sections || []).forEach(function (sec) { d[sec.id] = decisions[sec.id] || 'approve'; });
+      submit(d);
+    });
+
+    var rejectBtn = document.createElement('button');
+    rejectBtn.className = 'btn btn-danger';
+    rejectBtn.textContent = 'Reject';
+    rejectBtn.addEventListener('click', function () {
+      var all = {};
+      (gs.sections || []).forEach(function (sec) { all[sec.id] = 'reject'; });
+      submit(all);
+    });
+
+    var ledger = document.createElement('span');
+    ledger.className = 'ledger-badge';
+    ledger.style.marginLeft = 'auto';
+    ledger.innerHTML = '<span class="ledger-dot"></span>decision logged to ledger';
+
+    shell.foot.appendChild(approveBtn);
+    shell.foot.appendChild(submitBtn);
+    shell.foot.appendChild(rejectBtn);
+    shell.foot.appendChild(ledger);
+  }).catch(function (err) { showToast('Could not load gate review: ' + err); });
+}
+
+// ---- Repair control modal (full override — logged + confirmed) ----
+function openRepairModal(projectPath, workFolder) {
+  var shell = buildModalShell('Repair — ' + (projectPath.split(/[/\\]/).pop() || projectPath), 'var(--rose)');
+
+  var warn = document.createElement('div');
+  warn.className = 'repair-warn';
+  warn.textContent = '⚠ These operations can bypass the normal review gate. Use only to recover a corrupt or stuck run. Bypass actions require a reason and are written to the ledger.';
+  shell.body.appendChild(warn);
+
+  var wf = workFolder || '';
+
+  function post(path, payload, okMsg) {
+    return fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).then(function (r) {
+      return r.json().then(function (body) { return { status: r.status, body: body }; });
+    }).then(function (resp) {
+      if (resp.status === 409 && resp.body.liveSessionAttached && !payload.force) {
+        if (confirm('A live session ("' + resp.body.liveSessionAttached.name + '") is attached to this run. Override anyway? This may orphan that session.')) {
+          payload.force = true;
+          return post(path, payload, okMsg);
+        }
+        return;
+      }
+      if (!resp.body || resp.body.ok === false || resp.status >= 400) {
+        showToast(resp.body && resp.body.error ? resp.body.error : 'Repair action failed');
+        return;
+      }
+      showToast(okMsg);
+      fetchHarnessData();
+      return resp.body;
+    }).catch(function (err) { showToast('Repair error: ' + err); });
+  }
+
+  function reasonValue() { return reason.value.trim(); }
+  function requireReason() {
+    if (!reasonValue()) { showToast('A reason is required for override actions.'); reason.focus(); return false; }
+    return true;
+  }
+
+  // Reason field (declared before ops so bypass handlers can read it)
+  var reasonWrap = document.createElement('div');
+  reasonWrap.style.marginTop = '14px';
+  var reasonLabel = document.createElement('label');
+  reasonLabel.style.cssText = 'font-size:12px;color:var(--rose);font-weight:600';
+  reasonLabel.textContent = 'Reason (required for override actions)';
+  var reason = document.createElement('textarea');
+  reason.className = 'reason';
+  reason.style.borderColor = 'var(--rose)';
+  reason.placeholder = "e.g. tester session wasn't CC-spawned; checkpoint valid; advancing manually…";
+  reasonWrap.appendChild(reasonLabel); reasonWrap.appendChild(reason);
+
+  function opRow(name, desc, bypass, btnLabel, onClick) {
+    var row = document.createElement('div');
+    row.className = 'op-row' + (bypass ? ' bypass' : '');
+    var left = document.createElement('div');
+    var nm = document.createElement('div'); nm.className = 'op-name'; nm.textContent = name;
+    var ds = document.createElement('div'); ds.className = 'op-desc'; ds.textContent = desc;
+    left.appendChild(nm); left.appendChild(ds);
+    var btn = document.createElement('button');
+    btn.className = 'btn btn-sm' + (bypass ? ' btn-danger' : '');
+    btn.style.marginLeft = 'auto';
+    btn.textContent = btnLabel;
+    btn.addEventListener('click', onClick);
+    row.appendChild(left); row.appendChild(btn);
+    shell.body.appendChild(row);
+  }
+
+  // --- Safe ops (one click, no reason) ---
+  opRow('Regenerate phase-prompt', 'Rewrite .harness/phase-prompt.md from current state (fixes stale prompt).', false, 'Run', function () {
+    post('/api/harness/repair/regenerate-prompt', { projectPath: projectPath, workFolder: wf }, 'phase-prompt.md regenerated');
+  });
+  opRow('Unpause / refresh state', 'Clear a stuck pause; reload harness state.', false, 'Run', function () {
+    post('/api/harness/pause', { projectPath: projectPath, workFolder: wf, paused: false }, 'Harness unpaused');
+  });
+  opRow('Re-validate checkpoint', 'Re-run checkpoint validation and surface any errors.', false, 'Run', function () {
+    var url = '/api/harness/gate-status/' + encodeURIComponent(projectPath) + (wf ? '?workFolder=' + encodeURIComponent(wf) : '');
+    fetch(url).then(function (r) { return r.json(); }).then(function (gs) {
+      if (!gs || !gs.active) { showToast('No harness active'); return; }
+      showToast('Checkpoint for ' + gs.phase + ': ' + (gs.checkpointValid ? 'VALID' : 'INVALID'));
+    }).catch(function (err) { showToast('Validation error: ' + err); });
+  });
+
+  // --- Bypass ops (reason + confirm) ---
+  opRow('Force-advance phase ⚠', 'Advance past the gate without normal approval.', true, 'Override…', function () {
+    if (!requireReason()) return;
+    if (!confirm('Force-advance the phase, bypassing the review gate? This is logged as a manual override.')) return;
+    post('/api/harness/repair/force-advance', { projectPath: projectPath, workFolder: wf, reason: reasonValue() }, 'Phase force-advanced (logged)')
+      .then(function (b) { if (b) shell.close(); });
+  });
+  opRow('Clear / set gate ⚠', 'Manually mark the pending gate cleared, or un-clear a cleared gate.', true, 'Override…', function () {
+    if (!requireReason()) return;
+    var url = '/api/harness/gate-status/' + encodeURIComponent(projectPath) + (wf ? '?workFolder=' + encodeURIComponent(wf) : '');
+    fetch(url).then(function (r) { return r.json(); }).then(function (gs) {
+      var expected = (gs && gs.expectedGates) || [];
+      if (expected.length === 0) { showToast('No pending gate for this run to clear/set.'); return; }
+      var gate = expected[0];
+      var action = gs.gateCleared ? 'unclear' : 'clear';
+      if (!confirm((action === 'clear' ? 'Force-clear' : 'Un-clear') + ' gate "' + gate + '"? Logged as a manual override.')) return;
+      post('/api/harness/repair/gate', { projectPath: projectPath, workFolder: wf, action: action, gateName: gate, reason: reasonValue() }, 'Gate ' + action + 'ed (logged)');
+    }).catch(function (err) { showToast('Gate lookup error: ' + err); });
+  });
+  opRow('Deadlock recovery ⚠', 'Reset a run blocked by an invalid/missing checkpoint (skips validation).', true, 'Override…', function () {
+    if (!requireReason()) return;
+    if (!confirm('Recover this run by force-advancing past an invalid/missing checkpoint? Logged as a manual override.')) return;
+    post('/api/harness/repair/force-advance', { projectPath: projectPath, workFolder: wf, reason: reasonValue(), op: 'deadlock-recovery' }, 'Deadlock recovery applied (logged)')
+      .then(function (b) { if (b) shell.close(); });
+  });
+
+  shell.body.appendChild(reasonWrap);
+
+  var ledger = document.createElement('span');
+  ledger.className = 'ledger-badge';
+  ledger.innerHTML = '<span class="ledger-dot"></span>every repair action writes an append-only ledger event (who / what / reason / when)';
+  shell.foot.appendChild(ledger);
+}
+
+// Delegated click handlers for gate + repair controls
+document.addEventListener('click', function (e) {
+  var reviewBtn = e.target.closest('.gate-review-btn');
+  if (reviewBtn) {
+    var card = reviewBtn.closest('.harness-card');
+    if (!card) return;
+    openApproveModal(card.getAttribute('data-path'), card.getAttribute('data-workfolder') || '');
+    return;
+  }
+  var repairBtn = e.target.closest('.repair-btn');
+  if (repairBtn) {
+    openRepairModal(repairBtn.getAttribute('data-path'), repairBtn.getAttribute('data-workfolder') || '');
+    return;
+  }
 });
 
 // Socket.IO: listen for harness events
@@ -1931,6 +2312,12 @@ socket.on('harness-override', function () { fetchHarnessData(); });
 socket.on('harness-rework', function () { fetchHarnessData(); });
 socket.on('harness-phase-advanced', function () { fetchHarnessData(); });
 socket.on('harness-gate-cleared', function () { fetchHarnessData(); });
+// P1: Repair control events
+socket.on('harness-repair-override', function (data) {
+  console.log('[Harness] Repair override:', data && data.op);
+  fetchHarnessData();
+});
+socket.on('harness-prompt-regenerated', function () { fetchHarnessData(); });
 
 // Refresh harness data when switching to the tab
 var origSwitchTab = switchTab;
