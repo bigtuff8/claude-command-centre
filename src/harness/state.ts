@@ -9,6 +9,8 @@ import {
   HarnessType,
   HarnessMode,
   HarnessOverride,
+  HarnessManualOverride,
+  HarnessManualOverrideOp,
   HARNESS_PHASE_SEQUENCES,
 } from './types';
 import { appendLedgerEvent, trackDeadlockPrevented } from './ledger';
@@ -507,6 +509,183 @@ export function clearGate(
     ledgerPhase: state.harnessCurrentPhase,
     ledgerSessionId: sessionId,
     ledgerDetail: { gateType: gateName, decision: 'approved' },
+  });
+
+  saveHarnessState(state);
+}
+
+// ---- P1 / R-HARN-5: Manual gate-bypass ("Repair") overrides ----
+
+/**
+ * P1 / CR-02 / R-HARN-5: Record a manual gate-bypass on the run.
+ * Stamps a DURABLE marker into state.harnessManuallyOverridden AND emits a distinct
+ * `repair_override` ledger event (NEVER `gate_cleared{approved}` — a bypass must never look
+ * like a genuine human approval). Does NOT save state — the caller saves once, so this
+ * composes with the mutation it accompanies (force-advance, gate clear/un-clear).
+ */
+export function recordManualOverride(
+  state: HarnessState,
+  params: {
+    op: HarnessManualOverrideOp;
+    reason: string;
+    operator: string;
+    fromPhase: HarnessPhase | null;
+    toPhase: HarnessPhase | null;
+    gate?: string | null;
+    checkpointValid: boolean;
+  }
+): HarnessManualOverride {
+  const now = new Date().toISOString();
+  const entry: HarnessManualOverride = {
+    manualOverrideOp: params.op,
+    manualOverrideReason: params.reason,
+    manualOverrideTimestamp: now,
+    manualOverrideFromPhase: params.fromPhase,
+    manualOverrideToPhase: params.toPhase,
+    manualOverrideGate: params.gate ?? null,
+    manualOverrideOperator: params.operator,
+    manualOverrideCheckpointValid: params.checkpointValid,
+  };
+
+  if (!Array.isArray(state.harnessManuallyOverridden)) {
+    state.harnessManuallyOverridden = [];
+  }
+  state.harnessManuallyOverridden.push(entry);
+
+  appendLedgerEvent({
+    ledgerEventType: 'repair_override',
+    ledgerTimestamp: now,
+    ledgerProjectPath: state.harnessProjectPath,
+    ledgerProjectName: state.harnessProject,
+    ledgerWorkFolder: state.harnessWorkFolder,
+    ledgerHarness: state.harnessType,
+    ledgerMode: state.harnessMode,
+    ledgerPhase: state.harnessCurrentPhase,
+    ledgerSessionId: params.operator,
+    ledgerDetail: {
+      op: params.op,
+      reason: params.reason,
+      operator: params.operator,
+      fromPhase: params.fromPhase,
+      toPhase: params.toPhase,
+      gate: params.gate ?? null,
+      checkpointValidAtOverride: params.checkpointValid,
+    },
+  });
+
+  return entry;
+}
+
+/**
+ * P1 / CR-01: Guarded force-advance / deadlock recovery.
+ * Deliberately SKIPS checkpoint validation (that is the entire point — advancePhase() refuses
+ * an invalid checkpoint, so it cannot recover a deadlocked run). Records a manual-override
+ * marker + `repair_override` ledger event. Moves FORWARD only (use regressPhase for backward).
+ * Does NOT write phase-prompt.md — the caller (route) does that via orchestrator.writePhasePrompt
+ * to avoid a state->orchestrator circular import.
+ *
+ * @param toPhase Optional explicit target; defaults to the immediate next phase.
+ */
+export function forceAdvancePhase(
+  state: HarnessState,
+  sessionId: string | null,
+  reason: string,
+  toPhase?: HarnessPhase,
+  op: HarnessManualOverrideOp = 'force-advance'
+): { state: HarnessState; fromPhase: HarnessPhase; toPhase: HarnessPhase; checkpointValid: boolean; error?: undefined }
+  | { state?: undefined; error: string } {
+  const sequence = HARNESS_PHASE_SEQUENCES[state.harnessType];
+  if (!sequence) return { error: `Unknown harness type: "${state.harnessType}"` };
+
+  const fromPhase = state.harnessCurrentPhase;
+  const target = toPhase || getNextPhase(state);
+  if (!target) return { error: 'Cannot force-advance — already at the final phase' };
+
+  const currentIndex = sequence.indexOf(fromPhase);
+  const targetIndex = sequence.indexOf(target);
+  if (targetIndex < 0) return { error: `Unknown target phase: "${target}" for harness type "${state.harnessType}"` };
+  if (targetIndex <= currentIndex) {
+    return { error: `Force-advance must move forward (current "${fromPhase}", target "${target}"). Use regress for backward moves.` };
+  }
+
+  // Record whether the checkpoint WOULD have been valid — for the audit trail — but do NOT block.
+  const checkpointValid = validateCheckpoint(state, fromPhase).length === 0;
+
+  const now = new Date().toISOString();
+  const currentEntry = state.harnessPhaseHistory.find(
+    (e) => e.harnessPhase === fromPhase && !e.harnessPhaseCompletedAt
+  );
+  if (currentEntry) currentEntry.harnessPhaseCompletedAt = now;
+
+  state.harnessCurrentPhase = target;
+  state.harnessPhaseHistory.push({
+    harnessPhase: target,
+    harnessPhaseSessionId: sessionId,
+    harnessPhaseStartedAt: now,
+    harnessPhaseCompletedAt: null,
+  });
+
+  recordManualOverride(state, {
+    op,
+    reason,
+    operator: sessionId || 'dashboard',
+    fromPhase,
+    toPhase: target,
+    checkpointValid,
+  });
+
+  saveHarnessState(state);
+  return { state, fromPhase, toPhase: target, checkpointValid };
+}
+
+/**
+ * P1 / IM-04: Un-clear a governance gate (there was no un-clear path before).
+ * Records a manual-override marker + `repair_override` ledger event. Caller constrains
+ * `gateName` to the run's actual gate(s).
+ */
+export function unclearGate(
+  state: HarnessState,
+  gateName: string,
+  sessionId: string | null,
+  reason: string
+): void {
+  state.harnessGatesCleared[gateName] = false;
+
+  recordManualOverride(state, {
+    op: 'gate-unclear',
+    reason,
+    operator: sessionId || 'dashboard',
+    fromPhase: state.harnessCurrentPhase,
+    toPhase: state.harnessCurrentPhase,
+    gate: gateName,
+    checkpointValid: validateCheckpoint(state, state.harnessCurrentPhase).length === 0,
+  });
+
+  saveHarnessState(state);
+}
+
+/**
+ * P1 / CR-02: Force-clear a gate via the Repair control (bypass, not an approval).
+ * Unlike clearGate() — which emits `gate_cleared{approved}` for genuine reviews — this marks
+ * the gate cleared AND stamps a manual-override trace so it can never be mistaken for a real
+ * James approval. Caller constrains `gateName` to the run's actual pending gate(s).
+ */
+export function forceClearGate(
+  state: HarnessState,
+  gateName: string,
+  sessionId: string | null,
+  reason: string
+): void {
+  state.harnessGatesCleared[gateName] = true;
+
+  recordManualOverride(state, {
+    op: 'gate-clear',
+    reason,
+    operator: sessionId || 'dashboard',
+    fromPhase: state.harnessCurrentPhase,
+    toPhase: state.harnessCurrentPhase,
+    gate: gateName,
+    checkpointValid: validateCheckpoint(state, state.harnessCurrentPhase).length === 0,
   });
 
   saveHarnessState(state);

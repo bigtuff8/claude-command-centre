@@ -14,18 +14,22 @@ import {
   recordOverride,
   setHarnessPaused,
   clearGate,
+  forceClearGate,
+  unclearGate,
+  forceAdvancePhase,
   setPendingSpawn,
   clearPendingSpawn,
   checkPendingSpawn,
   getArtefactBasePath,
+  getNextPhase,
 } from '../harness/state';
-import { validateCheckpoint } from '../harness/checkpoints';
+import { validateCheckpoint, computeCheckpointHash } from '../harness/checkpoints';
 import { getRequiredReads } from '../harness/rules';
 import { appendLedgerEvent, readLedgerEvents, readProjectsSnapshot, readProjectEventLog, getMetrics, computeSuccessCriteria, trackGateValidationError, trackSpawnResult } from '../harness/ledger';
 import { escapeCmdArg } from '../services/session-spawn';
-import { HarnessType, HarnessMode, HarnessPhase, HarnessState, HARNESS_PHASE_SEQUENCES } from '../harness/types';
-import { isPhaseTransitionReady, executePhaseTransition, buildPhasePrompt, getHarnessSummary, spawnPhaseSession } from '../harness/orchestrator';
-import { registerWorkFolder } from '../state/sessions';
+import { HarnessType, HarnessMode, HarnessPhase, HarnessState, HarnessManualOverrideOp, HARNESS_PHASE_SEQUENCES } from '../harness/types';
+import { isPhaseTransitionReady, executePhaseTransition, buildPhasePrompt, getHarnessSummary, spawnPhaseSession, isAutoGate, writePhasePrompt, buildGateSectionsData, findLatestGateReviewFile } from '../harness/orchestrator';
+import { registerWorkFolder, getAllSessions } from '../state/sessions';
 
 /**
  * Extract workFolder from request query params or body.
@@ -35,35 +39,116 @@ function extractWorkFolder(req: Request): string | null {
   return (req.query.workFolder as string) || req.body?.workFolder || null;
 }
 
+/**
+ * P1 / IM-04: Resolve the gate name(s) that are actually meaningful for a run's current position.
+ * A manual gate exists at the current phase only if the current→next transition is a manual gate.
+ * The name mirrors what handleGateFeedback uses: design→* → 'designGate', otherwise 'preDeployment'.
+ * Returns [] when there is no manual gate at the current phase (constrains Repair gate ops).
+ */
+function getExpectedGateNames(state: HarnessState): string[] {
+  const next = getNextPhase(state);
+  if (!next) return [];
+  if (isAutoGate(state.harnessCurrentPhase, next)) return [];
+  return state.harnessCurrentPhase === 'design' ? ['designGate'] : ['preDeployment'];
+}
+
+/**
+ * P1 / IM-05: Detect a live CC-tracked session attached to this harness run.
+ * Force-advancing under a working session can orphan it, so bypass ops warn/refuse first.
+ */
+function findLiveAttachedSession(projectPath: string, workFolder: string | null): { id: string; name: string } | null {
+  const live = getAllSessions().find((s) =>
+    (s.status === 'active' || s.status === 'waiting' || s.status === 'held') &&
+    s.project === projectPath &&
+    ((workFolder || null) === (s.workFolderPath || null))
+  );
+  return live ? { id: live.id, name: live.name } : null;
+}
+
 let broadcastFn: (event: string, data: any) => void;
+
+/**
+ * P1 / R-HARN-4/6: Guard governance-MUTATING endpoints. Two protections:
+ *  1. Loopback-only — the socket's remote address must be a loopback address. If the CC is ever
+ *     bound to a non-loopback interface (host=0.0.0.0), a remote client cannot mutate governance
+ *     state. Hard refusal, not advisory.
+ *  2. Same-origin (CSRF / DNS-rebinding) — the Host header hostname must be localhost/127.0.0.1,
+ *     and any Origin header must resolve to the same. `Origin: null` / absent is allowed so the
+ *     emergency file:// review doc and server-internal callers still work.
+ */
+function requireLoopback(req: Request, res: Response, next: () => void): void {
+  const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+  const remote = (req.socket && req.socket.remoteAddress) || '';
+  if (!LOOPBACK.has(remote)) {
+    res.status(403).json({ error: 'Governance endpoints are loopback-only (127.0.0.1). Refused for a non-loopback client.' });
+    return;
+  }
+
+  const hostnameOf = (v: string): string => {
+    let h = (v || '').trim();
+    if (!h) return '';
+    // Strip scheme
+    h = h.replace(/^[a-z]+:\/\//i, '');
+    // Strip path
+    h = h.split('/')[0];
+    // Strip port (but keep IPv6 in brackets intact enough for the localhost check)
+    if (h.startsWith('[')) return h; // IPv6 literal — treated below
+    return h.split(':')[0].toLowerCase();
+  };
+  const ALLOWED_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+
+  const hostHeader = hostnameOf(req.headers.host || '');
+  if (hostHeader && !ALLOWED_HOSTS.has(hostHeader)) {
+    res.status(403).json({ error: `Refused: Host header "${req.headers.host}" is not a loopback host (DNS-rebinding guard).` });
+    return;
+  }
+
+  const origin = req.headers.origin;
+  if (origin && origin !== 'null') {
+    const originHost = hostnameOf(origin);
+    if (!ALLOWED_HOSTS.has(originHost)) {
+      res.status(403).json({ error: `Refused: cross-origin request from "${origin}" (CSRF guard).` });
+      return;
+    }
+  }
+
+  next();
+}
 
 export function createHarnessRouter(broadcast: (event: string, data: any) => void): Router {
   broadcastFn = broadcast;
   const router = Router();
 
   router.get('/status/:projectPath(*)', handleGetStatus);
-  router.post('/create', handleCreate);
-  router.post('/advance', handleAdvance);
-  router.post('/rework', handleRework);
-  router.post('/regress', handleRegress);
-  router.post('/override', handleOverride);
-  router.post('/pause', handlePause);
-  router.post('/gate/clear', handleClearGate);
+  router.post('/create', requireLoopback, handleCreate);
+  router.post('/advance', requireLoopback, handleAdvance);
+  router.post('/rework', requireLoopback, handleRework);
+  router.post('/regress', requireLoopback, handleRegress);
+  router.post('/override', requireLoopback, handleOverride);
+  router.post('/pause', requireLoopback, handlePause);
+  router.post('/gate/clear', requireLoopback, handleClearGate);
   router.get('/ledger', handleGetLedger);
   router.get('/projects', handleGetProjects);
   router.get('/validate/:projectPath(*)', handleValidate);
   router.get('/summary/:projectPath(*)', handleGetSummary);
   router.get('/transition-ready/:projectPath(*)', handleTransitionReady);
-  router.post('/transition', handleTransition);
+  router.post('/transition', requireLoopback, handleTransition);
   router.get('/phase-prompt/:projectPath(*)', handleGetPhasePrompt);
-  router.post('/gate/feedback', handleGateFeedback);
-  router.post('/sessions/spawn', handleSpawnSession);
+  router.post('/gate/feedback', requireLoopback, handleGateFeedback);
+  router.post('/sessions/spawn', requireLoopback, handleSpawnSession);
   router.get('/metrics', handleGetMetrics);
   router.get('/success-criteria', handleGetSuccessCriteria);
   router.get('/project-events/:projectPath(*)', handleGetProjectEvents);
   // RISK-05 CT-2: Recovery endpoints for stale pendingSpawn
-  router.post('/retry-spawn', handleRetrySpawn);
-  router.post('/clear-pending-spawn', handleClearPendingSpawn);
+  router.post('/retry-spawn', requireLoopback, handleRetrySpawn);
+  router.post('/clear-pending-spawn', requireLoopback, handleClearPendingSpawn);
+
+  // P1 — gate surfacing (read-only) + Repair control (governance-mutating, loopback-guarded)
+  router.get('/gate-status/:projectPath(*)', handleGateStatus);
+  router.get('/gate-sections/:projectPath(*)', handleGateSections);
+  router.post('/repair/regenerate-prompt', requireLoopback, handleRepairRegeneratePrompt);
+  router.post('/repair/force-advance', requireLoopback, handleRepairForceAdvance);
+  router.post('/repair/gate', requireLoopback, handleRepairGate);
 
   return router;
 }
@@ -437,6 +522,12 @@ function handleGetPhasePrompt(req: Request, res: Response): void {
 // F004: Rate limit tracking for session spawns
 const spawnTimestamps: Map<string, number> = new Map();
 
+// P1 / IM-02: Double-submit dedup for manual-gate approvals. A manual gate had NO guard, so two
+// rapid submits could both pass the all-approved branch (state hasn't advanced yet), double-
+// advancing and double-spawning. Keyed by run + the phase being approved; cleared when the
+// spawn settles.
+const gateAdvanceInProgress: Set<string> = new Set();
+
 /** F004: Spawn a new session for a harness phase via API. */
 async function handleSpawnSession(req: Request, res: Response): Promise<void> {
   const { projectPath, workFolder, phase, initialMessage } = req.body;
@@ -583,6 +674,24 @@ function handleGateFeedback(req: Request, res: Response): void {
     return;
   }
 
+  // IM-01 (TOCTOU): if the review was stamped with a checkpoint hash, verify the checkpoint on
+  // disk hasn't changed under the reviewer. The in-app modal always sends this; the legacy
+  // file:// review doc does not, so absence is tolerated (backward compat) but logged.
+  if (feedback.checkpointHash) {
+    const currentHash = computeCheckpointHash(state, state.harnessCurrentPhase);
+    if (currentHash && currentHash !== feedback.checkpointHash) {
+      res.status(409).json({
+        error: 'Checkpoint changed since this review was generated — re-review required.',
+        reReview: true,
+        expected: feedback.checkpointHash,
+        actual: currentHash,
+      });
+      return;
+    }
+  } else {
+    console.log(`[Gate] Feedback for ${projectLabel} has no checkpointHash (legacy review doc) — TOCTOU check skipped.`);
+  }
+
   // Tally decisions
   const sections = feedback.sections as Record<string, { decision: string; comment?: string }>;
   const decisions = Object.values(sections);
@@ -621,6 +730,15 @@ function handleGateFeedback(req: Request, res: Response): void {
   });
 
   if (allApproved) {
+    // IM-02: guard against a double-submit racing the phase advance.
+    const dedupeKey = `${state.harnessProjectPath}|${state.harnessWorkFolder || ''}|${state.harnessCurrentPhase}`;
+    if (gateAdvanceInProgress.has(dedupeKey)) {
+      console.log(`[Gate] Duplicate approval for ${dedupeKey} ignored (advance already in progress).`);
+      res.json({ ok: true, decision: 'approved', duplicate: true, advanced: false });
+      return;
+    }
+    gateAdvanceInProgress.add(dedupeKey);
+
     // Clear the gate and attempt phase transition
     clearGate(state, gateName, null);
 
@@ -633,6 +751,10 @@ function handleGateFeedback(req: Request, res: Response): void {
 
     // Try to advance to next phase and spawn session
     const result = executePhaseTransition(state, null);
+    if (!result.success) {
+      // Advance failed (e.g. checkpoint invalid) — release the guard so it can be retried.
+      gateAdvanceInProgress.delete(dedupeKey);
+    }
     if (result.success && result.nextPhase) {
       broadcastFn('harness-phase-transition', {
         projectPath,
@@ -668,8 +790,15 @@ function handleGateFeedback(req: Request, res: Response): void {
             error: String(err),
             pendingSpawn: true,
           });
+        }).finally(() => {
+          gateAdvanceInProgress.delete(dedupeKey); // IM-02: release the dedup guard
         });
+      } else {
+        gateAdvanceInProgress.delete(dedupeKey);
       }
+    } else {
+      // Advanced but with no next phase (final phase) — nothing to spawn; release the guard.
+      gateAdvanceInProgress.delete(dedupeKey);
     }
 
     res.json({
@@ -754,4 +883,243 @@ function handleClearPendingSpawn(req: Request, res: Response): void {
   clearPendingSpawn(state);
   broadcastFn('pending-spawn-resolved', { projectPath, phase, manual: true });
   res.json({ ok: true, cleared: phase });
+}
+
+// ================= P1 — Gate surfacing + Repair control =================
+
+/**
+ * P1 / IM-01: Read-only gate status for a run. GATE_CONFIG is server-only, so the dashboard
+ * cannot derive "is this a manual gate / is the checkpoint valid / is there a review yet"
+ * without this. Drives the amber gate banner (States A/B/C) on the harness card.
+ */
+function handleGateStatus(req: Request, res: Response): void {
+  const projectPath = decodeURIComponent(req.params.projectPath);
+  const state = loadHarnessState(projectPath, extractWorkFolder(req));
+
+  if (!state) {
+    res.json({ active: false });
+    return;
+  }
+
+  const currentPhase = state.harnessCurrentPhase;
+  const nextPhase = getNextPhase(state);
+  const isManualGate = nextPhase ? !isAutoGate(currentPhase, nextPhase) : false;
+  const checkpointValid = validateCheckpoint(state, currentPhase).length === 0;
+  const reviewFilePath = findLatestGateReviewFile(state, currentPhase);
+  const expectedGates = getExpectedGateNames(state);
+  const gateCleared = expectedGates.some((g) => state.harnessGatesCleared[g] === true);
+  const overrides = Array.isArray(state.harnessManuallyOverridden) ? state.harnessManuallyOverridden : [];
+  const latestOverride = overrides.length > 0 ? overrides[overrides.length - 1] : null;
+  const liveSession = findLiveAttachedSession(state.harnessProjectPath, state.harnessWorkFolder);
+
+  res.json({
+    active: true,
+    projectPath: state.harnessProjectPath,
+    workFolder: state.harnessWorkFolder,
+    project: state.harnessProject,
+    phase: currentPhase,
+    nextPhase,
+    isManualGate,
+    checkpointValid,
+    reviewFilePath,
+    hasReview: !!reviewFilePath,
+    expectedGates,
+    gateCleared,
+    checkpointHash: computeCheckpointHash(state, currentPhase),
+    manuallyOverridden: latestOverride,
+    manualOverrideCount: overrides.length,
+    liveSessionAttached: liveSession,
+  });
+}
+
+/**
+ * P1 / CR-03: Same-origin structured gate data for the embedded Review & Approve modal.
+ * Returns plain-text sections + the checkpoint hash (TOCTOU stamp) so the dashboard renders
+ * the review in-app and POSTs the real section IDs to /api/gate/feedback.
+ */
+function handleGateSections(req: Request, res: Response): void {
+  const projectPath = decodeURIComponent(req.params.projectPath);
+  const state = loadHarnessState(projectPath, extractWorkFolder(req));
+
+  if (!state) {
+    res.status(404).json({ error: 'No harness active for this project' });
+    return;
+  }
+
+  const currentPhase = state.harnessCurrentPhase;
+  const nextPhase = getNextPhase(state);
+  if (!nextPhase) {
+    res.status(400).json({ error: 'No next phase — the run is at its final phase, so there is no gate to review.' });
+    return;
+  }
+
+  const { sections, reviewType } = buildGateSectionsData(state, currentPhase, nextPhase);
+
+  res.json({
+    project: state.harnessProject,
+    projectPath: state.harnessProjectPath,
+    workFolder: state.harnessWorkFolder,
+    phase: currentPhase,
+    nextPhase,
+    reviewType,
+    checkpointValid: validateCheckpoint(state, currentPhase).length === 0,
+    checkpointHash: computeCheckpointHash(state, currentPhase),
+    sections,
+  });
+}
+
+/**
+ * P1 (safe Repair op): Regenerate .harness/phase-prompt.md from current state. No bypass, no
+ * reason required — fixes a stale prompt. One-click in the Repair panel.
+ */
+function handleRepairRegeneratePrompt(req: Request, res: Response): void {
+  const { projectPath, phase } = req.body;
+  const state = loadHarnessState(projectPath, extractWorkFolder(req));
+
+  if (!state) {
+    res.status(404).json({ error: 'No harness active for this project' });
+    return;
+  }
+
+  const targetPhase = (phase as HarnessPhase) || state.harnessCurrentPhase;
+  const written = writePhasePrompt(state, targetPhase);
+  if (!written) {
+    res.status(500).json({ error: 'Failed to write phase-prompt.md' });
+    return;
+  }
+
+  broadcastFn('harness-prompt-regenerated', { projectPath: state.harnessProjectPath, phase: targetPhase });
+  res.json({ ok: true, phase: targetPhase, path: written });
+}
+
+/**
+ * P1 / CR-01: Guarded force-advance / deadlock recovery (the SAME bypass path).
+ * Explicitly skips checkpoint validation, ALWAYS rewrites phase-prompt.md, emits a distinct
+ * `repair_override` ledger event, stamps the persistent override marker, and 400s on a missing
+ * reason. Refuses if a live CC session is attached unless { force: true }.
+ */
+function handleRepairForceAdvance(req: Request, res: Response): void {
+  const { projectPath, reason, toPhase, sessionId, force } = req.body;
+  const op: HarnessManualOverrideOp = req.body.op === 'deadlock-recovery' ? 'deadlock-recovery' : 'force-advance';
+
+  if (!reason || typeof reason !== 'string' || !reason.trim()) {
+    res.status(400).json({ error: 'reason is required for a gate bypass (force-advance / deadlock recovery).' });
+    return;
+  }
+
+  const workFolder = extractWorkFolder(req);
+  // IM-05: reload state immediately before mutating (loadHarnessState reads fresh from disk).
+  const state = loadHarnessState(projectPath, workFolder);
+  if (!state) {
+    res.status(404).json({ error: 'No harness active for this project' });
+    return;
+  }
+
+  // IM-05: refuse to force-advance out from under a live attached session unless forced.
+  const liveSession = findLiveAttachedSession(state.harnessProjectPath, state.harnessWorkFolder);
+  if (liveSession && !force) {
+    res.status(409).json({
+      error: `A live session ("${liveSession.name}") is attached to this run. Force-advancing may orphan it. Stop that session first, or resubmit with force:true.`,
+      liveSessionAttached: liveSession,
+    });
+    return;
+  }
+
+  const result = forceAdvancePhase(state, sessionId || 'dashboard', reason.trim(), toPhase as HarnessPhase | undefined, op);
+  if (!result.state) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+
+  // CR-01: a recovered run MUST leave a fresh phase-prompt for its next session.
+  writePhasePrompt(result.state, result.toPhase);
+
+  broadcastFn('harness-repair-override', {
+    projectPath: state.harnessProjectPath,
+    op,
+    fromPhase: result.fromPhase,
+    toPhase: result.toPhase,
+    reason: reason.trim(),
+    checkpointValid: result.checkpointValid,
+  });
+
+  res.json({
+    ok: true,
+    op,
+    fromPhase: result.fromPhase,
+    toPhase: result.toPhase,
+    checkpointValidAtOverride: result.checkpointValid,
+    forced: !!force,
+    state: result.state,
+  });
+}
+
+/**
+ * P1 / CR-02 + IM-04: Force-clear or un-clear a gate via Repair (a bypass, not an approval).
+ * Emits `repair_override` (never `gate_cleared{approved}`), stamps the override marker, requires
+ * a reason, and constrains gateName to the run's actual gate(s).
+ */
+function handleRepairGate(req: Request, res: Response): void {
+  const { projectPath, gateName, reason, sessionId, force } = req.body;
+  const action = req.body.action;
+
+  if (action !== 'clear' && action !== 'unclear') {
+    res.status(400).json({ error: "action is required and must be 'clear' or 'unclear'." });
+    return;
+  }
+  if (!reason || typeof reason !== 'string' || !reason.trim()) {
+    res.status(400).json({ error: 'reason is required for a manual gate override.' });
+    return;
+  }
+  if (!gateName || typeof gateName !== 'string') {
+    res.status(400).json({ error: 'gateName is required (string).' });
+    return;
+  }
+
+  const workFolder = extractWorkFolder(req);
+  const state = loadHarnessState(projectPath, workFolder);
+  if (!state) {
+    res.status(404).json({ error: 'No harness active for this project' });
+    return;
+  }
+
+  // IM-04: constrain to the run's real gate(s). For 'clear', the gate must be the current
+  // pending gate. For 'unclear', it must be one that is actually cleared right now.
+  const expected = getExpectedGateNames(state);
+  if (action === 'clear' && !expected.includes(gateName)) {
+    res.status(400).json({
+      error: `Gate "${gateName}" is not a pending gate for this run's current phase (${state.harnessCurrentPhase}).`,
+      expectedGates: expected,
+    });
+    return;
+  }
+  if (action === 'unclear' && state.harnessGatesCleared[gateName] !== true) {
+    res.status(400).json({ error: `Gate "${gateName}" is not currently cleared, so it cannot be un-cleared.` });
+    return;
+  }
+
+  // IM-05: warn/refuse under a live attached session unless forced.
+  const liveSession = findLiveAttachedSession(state.harnessProjectPath, state.harnessWorkFolder);
+  if (liveSession && !force) {
+    res.status(409).json({
+      error: `A live session ("${liveSession.name}") is attached to this run. Resubmit with force:true to override anyway.`,
+      liveSessionAttached: liveSession,
+    });
+    return;
+  }
+
+  if (action === 'clear') {
+    forceClearGate(state, gateName, sessionId || 'dashboard', reason.trim());
+  } else {
+    unclearGate(state, gateName, sessionId || 'dashboard', reason.trim());
+  }
+
+  broadcastFn('harness-repair-override', {
+    projectPath: state.harnessProjectPath,
+    op: action === 'clear' ? 'gate-clear' : 'gate-unclear',
+    gate: gateName,
+    reason: reason.trim(),
+  });
+
+  res.json({ ok: true, action, gateName, state });
 }

@@ -97,6 +97,20 @@ export interface HarnessProjectSnapshot {
   snapshotOverrideCount: number;
   snapshotIsPaused: boolean;
   snapshotLastActivity: string;
+  // P1: the run's work folder (last seen on an event). Lets the dashboard target the correct
+  // run for gate-status / gate-sections / feedback. Null for legacy root-level harnesses.
+  snapshotWorkFolder: string | null;
+  // P1 / R-HARN-5: persistent manual-override trace, read from live state. The badge uses the
+  // most-recent entry; the count drives the per-run indicator + feeds the metric tile.
+  snapshotManualOverrideCount: number;
+  snapshotManualOverride: {
+    op: string;
+    reason: string;
+    at: string;
+    fromPhase: string | null;
+    toPhase: string | null;
+    gate: string | null;
+  } | null;
 }
 
 function rebuildProjectsSnapshot(): void {
@@ -125,11 +139,18 @@ function rebuildProjectsSnapshot(): void {
         snapshotOverrideCount: 0,
         snapshotIsPaused: false,
         snapshotLastActivity: event.ledgerTimestamp,
+        snapshotWorkFolder: event.ledgerWorkFolder ?? null,
+        snapshotManualOverrideCount: 0,
+        snapshotManualOverride: null,
       };
       projects.set(key, snap);
     }
 
     snap.snapshotLastActivity = event.ledgerTimestamp;
+    // Track the most-recently-seen work folder for this project path (P1 targeting).
+    if (event.ledgerWorkFolder !== undefined && event.ledgerWorkFolder !== null) {
+      snap.snapshotWorkFolder = event.ledgerWorkFolder;
+    }
 
     switch (event.ledgerEventType) {
       case 'phase_start':
@@ -166,14 +187,38 @@ function rebuildProjectsSnapshot(): void {
     }
   }
 
-  // Enrich snapshot with live pause state from disk
+  // Enrich snapshot with live state from disk (pause + P1 manual-override trace).
+  // Work-folder aware: state for a work-folder run lives at {project}/{workFolder}/.harness/,
+  // not the project root — read there so pause + override markers surface for those runs too.
   for (const snap of projects.values()) {
     try {
-      const statePath = path.join(snap.snapshotProjectPath, '.harness', 'harness-state.json');
+      const base = snap.snapshotWorkFolder
+        ? path.join(snap.snapshotProjectPath, snap.snapshotWorkFolder)
+        : snap.snapshotProjectPath;
+      let statePath = path.join(base, '.harness', 'harness-state.json');
+      // Fall back to the project root if the work-folder state isn't present (legacy layout).
+      if (!fs.existsSync(statePath)) {
+        statePath = path.join(snap.snapshotProjectPath, '.harness', 'harness-state.json');
+      }
       if (fs.existsSync(statePath)) {
         const liveState = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
         snap.snapshotIsPaused = liveState.harnessPaused === true;
         snap.snapshotCurrentPhase = liveState.harnessCurrentPhase || snap.snapshotCurrentPhase;
+
+        // P1 / R-HARN-5: surface the persistent manual-override trace.
+        const overrides = Array.isArray(liveState.harnessManuallyOverridden) ? liveState.harnessManuallyOverridden : [];
+        snap.snapshotManualOverrideCount = overrides.length;
+        if (overrides.length > 0) {
+          const latest = overrides[overrides.length - 1];
+          snap.snapshotManualOverride = {
+            op: latest.manualOverrideOp,
+            reason: latest.manualOverrideReason,
+            at: latest.manualOverrideTimestamp,
+            fromPhase: latest.manualOverrideFromPhase ?? null,
+            toPhase: latest.manualOverrideToPhase ?? null,
+            gate: latest.manualOverrideGate ?? null,
+          };
+        }
       }
     } catch { /* best effort */ }
   }
@@ -242,6 +287,10 @@ interface HarnessMetrics {
   metricsSpawnFailure: number;
   metricsGateValidationErrors: number;
   metricsEnforcementExemptions: number;
+  // P1 / R-HARN-5: manual gate-bypasses via the Repair control (distinct from generic overrides).
+  metricsRepairOverrides: number;
+  // P4 / R-HARN-3: gate reviews that surfaced deferred (unverified) features.
+  metricsDeferredGates: number;
 }
 
 const metrics: HarnessMetrics = {
@@ -263,6 +312,8 @@ const metrics: HarnessMetrics = {
   metricsSpawnFailure: 0,
   metricsGateValidationErrors: 0,
   metricsEnforcementExemptions: 0,
+  metricsRepairOverrides: 0,
+  metricsDeferredGates: 0,
 };
 
 function trackMetric(event: LedgerEvent): void {
@@ -292,6 +343,12 @@ function trackMetric(event: LedgerEvent): void {
       if (event.ledgerDetail?.spawned) {
         metrics.metricsSessionsLaunched++;
       }
+      break;
+    case 'repair_override':
+      metrics.metricsRepairOverrides++;
+      break;
+    case 'gate_deferred_features':
+      metrics.metricsDeferredGates++;
       break;
   }
 }

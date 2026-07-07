@@ -23,6 +23,18 @@ function hashFile(filePath: string): string | null {
 }
 
 /**
+ * P1 / IM-01 (TOCTOU): Compute the SHA-256 hash of a phase's checkpoint file on disk.
+ * The gate review is stamped with this; the approve POST echoes it back and the handler
+ * rejects if it no longer matches (the checkpoint changed under the reviewer → re-review).
+ * Returns null if the checkpoint file does not exist.
+ */
+export function computeCheckpointHash(state: HarnessState, phase: HarnessPhase): string | null {
+  const artefactBase = getArtefactBasePath(state);
+  const checkpointPath = path.join(artefactBase, HARNESS_DIR, `checkpoint-${phase}.json`);
+  return hashFile(checkpointPath);
+}
+
+/**
  * Read and parse a checkpoint file from the project's .harness/ directory.
  */
 export function readCheckpoint(

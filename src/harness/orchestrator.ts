@@ -186,6 +186,25 @@ export function buildPhasePrompt(state: HarnessState, phase: HarnessPhase): stri
   return lines.join('\n');
 }
 
+/**
+ * P1 / P3 / CR-01: Write .harness/phase-prompt.md for a phase from current state.
+ * Single source of truth for the prompt writer, shared by the advance route (P3) and the
+ * Repair force-advance path (which MUST always leave a fresh prompt so a recovered run's next
+ * session reads the correct brief). Idempotent. Returns the path written, or null on failure.
+ */
+export function writePhasePrompt(state: HarnessState, phase: HarnessPhase): string | null {
+  try {
+    const promptDir = path.join(getArtefactBasePath(state), '.harness');
+    fs.mkdirSync(promptDir, { recursive: true });
+    const promptPath = path.join(promptDir, 'phase-prompt.md');
+    fs.writeFileSync(promptPath, buildPhasePrompt(state, phase), 'utf-8');
+    return promptPath;
+  } catch (err) {
+    console.log(`[Orchestrator] Could not write phase-prompt.md: ${err}`);
+    return null;
+  }
+}
+
 // ---- F008: Handoff brief generation + validation ----
 
 const HANDOFF_REQUIRED_SECTIONS = ['## What Was Done', '## Key Decisions', '## Next Phase Instructions'];
@@ -681,6 +700,30 @@ export function generateGateReviewHtml(
           title: `⚠ Deferred Features (${deferred.length}) — released WITHOUT verification`,
           content: `<p>These features are being released as <strong>deferred</strong> (post-deployment or human follow-up). They are <strong>not verified</strong>. Confirm you accept this before approving.</p><ul>${rows}</ul>`,
         });
+
+        // P4 / R-HARN-3 (remaining piece): a deferral is an unverified feature reaching the gate.
+        // Emit an audit event so the deferral leaves a trail beyond the (transient) HTML review —
+        // James's oversight proxy requires every softened control to leave a reviewable trace.
+        appendLedgerEvent({
+          ledgerEventType: 'gate_deferred_features',
+          ledgerTimestamp: new Date().toISOString(),
+          ledgerProjectPath: state.harnessProjectPath,
+          ledgerProjectName: state.harnessProject,
+          ledgerWorkFolder: state.harnessWorkFolder,
+          ledgerHarness: state.harnessType,
+          ledgerMode: state.harnessMode,
+          ledgerPhase: completedPhase,
+          ledgerSessionId: null,
+          ledgerDetail: {
+            count: deferred.length,
+            features: deferred.map((f: any) => ({
+              id: f.id,
+              description: f.description,
+              notes: f.notes || null,
+              hasNote: !!(f.notes && String(f.notes).trim()),
+            })),
+          },
+        });
       }
     }
   } catch { /* skip — feature list optional/parse error */ }
@@ -760,6 +803,141 @@ async function submitFeedback(){var fb={reviewType:'${completedPhase === 'design
     console.error(`[Orchestrator] Could not generate gate review HTML: ${err}`);
     return null;
   }
+}
+
+/**
+ * P1 / CR-03: Find the most-recent generated gate-review HTML for a completed phase, or null.
+ * Used by GET /api/harness/gate-status so the dashboard can link/label an existing review.
+ */
+export function findLatestGateReviewFile(state: HarnessState, completedPhase: HarnessPhase): string | null {
+  try {
+    const dir = path.join(getArtefactBasePath(state), '.harness');
+    if (!fs.existsSync(dir)) return null;
+    const prefix = `gate-review-${completedPhase}-`;
+    const matches = fs.readdirSync(dir)
+      .filter((f) => f.startsWith(prefix) && f.endsWith('.html'))
+      .sort();                                   // timestamp suffix sorts lexically = chronologically
+    if (matches.length === 0) return null;
+    return path.join(dir, matches[matches.length - 1]);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * P1 / CR-03: Build the gate review as STRUCTURED PLAIN-TEXT sections for the same-origin
+ * dashboard modal. The generated review doc is a file:// page in OneDrive .harness/ that can't
+ * be iframed same-origin, and its cross-origin POST is unreliable — so the dashboard renders
+ * from this data instead and POSTs the real section IDs to /api/gate/feedback.
+ *
+ * SECURITY: every field here is derived from agent/file content (checkpoint, audit, feature
+ * notes). It is returned as PLAIN TEXT (no HTML) and the client inserts it via textContent —
+ * so it can never inject markup into the dashboard origin (AD: escape all agent-derived content).
+ */
+export function buildGateSectionsData(
+  state: HarnessState,
+  completedPhase: HarnessPhase,
+  nextPhase: HarnessPhase
+): {
+  sections: Array<{ id: string; title: string; text: string; kind: string }>;
+  reviewType: 'design-gate' | 'pre-deployment';
+} {
+  const artefactBase = getArtefactBasePath(state);
+  const sections: Array<{ id: string; title: string; text: string; kind: string }> = [];
+
+  // Phase summary
+  sections.push({
+    id: 'phase-summary',
+    title: `Phase summary: ${completedPhase} → ${nextPhase}`,
+    kind: 'summary',
+    text: [
+      `Project: ${state.harnessProject}`,
+      `Harness: ${state.harnessType} / ${state.harnessMode}`,
+      `Phase completing: ${completedPhase}`,
+      `Next phase: ${nextPhase}`,
+      `Rework cycles: ${state.harnessReworkCycles}`,
+      `Overrides: ${state.harnessOverrides.length}`,
+    ].join('\n'),
+  });
+
+  // Checkpoint data
+  const checkpointFile = PHASE_CHECKPOINT_FILES[completedPhase];
+  const checkpointPath = path.join(artefactBase, '.harness', checkpointFile);
+  let checkpointData: any = {};
+  try {
+    if (fs.existsSync(checkpointPath)) checkpointData = JSON.parse(fs.readFileSync(checkpointPath, 'utf-8'));
+  } catch { /* skip */ }
+  sections.push({
+    id: 'checkpoint-data',
+    title: 'Checkpoint validation',
+    kind: 'checkpoint',
+    text: [
+      `Completed at: ${checkpointData.checkpointCompletedAt || 'N/A'}`,
+      `Agent file read confirmed: ${checkpointData.checkpointAgentFileReadConfirmed ? 'Yes' : 'No'}`,
+      `User confirmed: ${checkpointData.checkpointUserConfirmed ? 'Yes' : 'No'}`,
+    ].join('\n'),
+  });
+
+  // Artefacts
+  const artefacts = checkpointData.checkpointRequiredArtefacts || {};
+  for (const [name, art] of Object.entries<any>(artefacts)) {
+    sections.push({
+      id: `artefact-${name}`,
+      title: `Artefact: ${name}`,
+      kind: 'artefact',
+      text: [
+        `Path: ${art.checkpointArtefactPath || 'N/A'}`,
+        `Exists: ${art.checkpointArtefactExists ? 'Yes' : 'No'}`,
+        art.checkpointArtefactHash ? `Hash: ${art.checkpointArtefactHash}` : '',
+      ].filter(Boolean).join('\n'),
+    });
+  }
+
+  // Code audit (dev→test)
+  if (completedPhase === 'dev') {
+    const auditPath = path.join(artefactBase, 'code-audit.md');
+    if (fs.existsSync(auditPath)) {
+      try {
+        sections.push({ id: 'code-audit', title: 'Code audit report', kind: 'report', text: fs.readFileSync(auditPath, 'utf-8') });
+      } catch { /* skip */ }
+    }
+  }
+
+  // Independent gate audit (latest audit-{phase}-*.md, written by invokeGateAudit)
+  try {
+    const dir = path.join(artefactBase, '.harness');
+    if (fs.existsSync(dir)) {
+      const auditFiles = fs.readdirSync(dir).filter((f) => f.startsWith(`audit-${completedPhase}-`) && f.endsWith('.md')).sort();
+      if (auditFiles.length > 0) {
+        const latest = path.join(dir, auditFiles[auditFiles.length - 1]);
+        sections.push({ id: 'gate-audit', title: 'Independent gate audit', kind: 'report', text: fs.readFileSync(latest, 'utf-8') });
+      }
+    }
+  } catch { /* skip */ }
+
+  // Deferred features (P4 / R-HARN-3)
+  try {
+    const flPath = path.join(artefactBase, 'feature-list.json');
+    if (fs.existsSync(flPath)) {
+      const fl = JSON.parse(fs.readFileSync(flPath, 'utf-8'));
+      const deferred = (fl.features || []).filter((f: any) => f.status === 'deferred');
+      if (deferred.length > 0) {
+        sections.push({
+          id: 'deferred-features',
+          title: `⚠ Deferred features (${deferred.length}) — released WITHOUT verification`,
+          kind: 'deferred',
+          text: deferred.map((f: any) =>
+            `${f.id} — ${f.description}\n  Deferred because: ${f.notes || '(no note — this should have blocked the gate)'}`
+          ).join('\n\n'),
+        });
+      }
+    }
+  } catch { /* skip */ }
+
+  return {
+    sections,
+    reviewType: completedPhase === 'design' ? 'design-gate' : 'pre-deployment',
+  };
 }
 
 // ---- F007: SteerCo Companion Auto-invocation ----

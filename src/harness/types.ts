@@ -29,6 +29,28 @@ export interface HarnessOverride {
   harnessOverrideReason: string;
 }
 
+// P1 / R-HARN-5: a manual gate-bypass ("Repair") override. Distinct from HarnessOverride
+// (skipRule/pause/etc.): this records an intentional bypass of the human-review gate, so it
+// leaves a DURABLE, visible trace on the run — not just an ephemeral ledger line. Each op that
+// bypasses normal approval (force-advance, gate clear/un-clear, deadlock recovery) appends one
+// of these to state.harnessManuallyOverridden and emits a `repair_override` ledger event.
+export type HarnessManualOverrideOp =
+  | 'force-advance'
+  | 'deadlock-recovery'
+  | 'gate-clear'
+  | 'gate-unclear';
+
+export interface HarnessManualOverride {
+  manualOverrideOp: HarnessManualOverrideOp;
+  manualOverrideReason: string;
+  manualOverrideTimestamp: string;
+  manualOverrideFromPhase: HarnessPhase | null;
+  manualOverrideToPhase: HarnessPhase | null;
+  manualOverrideGate?: string | null;
+  manualOverrideOperator: string;              // who ran it (session id or 'dashboard')
+  manualOverrideCheckpointValid: boolean;      // was the checkpoint valid at bypass time?
+}
+
 export interface HarnessState {
   harnessStateVersion: number;        // Schema version (1=legacy, 2=work-folder)
   harnessProject: string;
@@ -42,6 +64,10 @@ export interface HarnessState {
   harnessGatesCleared: Record<string, boolean>;
   harnessReworkCycles: number;
   harnessOverrides: HarnessOverride[];
+  // P1 / R-HARN-5: persistent trace of manual gate-bypasses (Repair control). Null/absent when
+  // the run has never been manually overridden. The dashboard renders a badge from the most
+  // recent entry and a per-run counter from the length; the metric tile aggregates across runs.
+  harnessManuallyOverridden?: HarnessManualOverride[] | null;
   harnessPaused: boolean;
   harnessPendingSpawn?: {           // RISK-05: Set when advancePhase succeeds but spawnPhaseSession hasn't completed yet
     harnessPendingPhase: HarnessPhase;
@@ -136,7 +162,14 @@ export type LedgerEventType =
   | 'violation'
   | 'override'
   | 'rework'
-  | 'harness_complete';
+  | 'harness_complete'
+  // P1 / CR-02: a manual gate-bypass via the Repair control. MUST be distinct from
+  // `gate_cleared{approved}` (a real human approval) so bypasses are separately countable
+  // and can never be mistaken for a genuine review.
+  | 'repair_override'
+  // P4 / R-HARN-3: emitted when a gate review surfaces features released as `deferred`
+  // (unverified). Captures which features + their notes so the deferral leaves an audit trail.
+  | 'gate_deferred_features';
 
 export interface LedgerEvent {
   ledgerEventType: LedgerEventType;
