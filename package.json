@@ -1,6 +1,6 @@
 {
   "name": "claude-command-centre",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Web dashboard for monitoring and managing multiple Claude Code sessions",
   "main": "dist/index.js",
   "bin": {

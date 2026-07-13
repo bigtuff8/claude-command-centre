@@ -16,6 +16,7 @@ let activeTab = 'portfolio';
 let activeFilters = { scope: 'all', view: 'board' };
 let activeRiskFilters = { status: 'all', project: 'all' };
 let activeActivityFilters = { date: 'week', project: 'all', type: 'all' };
+let activeHarnessFilter = 'all';
 let selectedProjectId = null;
 let permissionTimerInterval = null;
 
@@ -1609,6 +1610,29 @@ function setupEventListeners() {
     });
   }
 
+  // Harness status filters (All / Active / Paused / At Gate)
+  document.querySelectorAll('#harnessStatusFilters .pill').forEach(function (pill) {
+    pill.addEventListener('click', function () {
+      document.querySelectorAll('#harnessStatusFilters .pill').forEach(function (p) { p.classList.remove('active'); });
+      this.classList.add('active');
+      activeHarnessFilter = this.dataset.hfilter;
+      try { renderHarnessGrid(harnessData); } catch (e) { console.error(e); }
+    });
+  });
+
+  // Sessions status filters — reach into the embedded dashboard iframe (app.js)
+  document.querySelectorAll('#filters-sessions .filter-pills .pill').forEach(function (pill) {
+    pill.addEventListener('click', function () {
+      document.querySelectorAll('#filters-sessions .filter-pills .pill').forEach(function (p) { p.classList.remove('active'); });
+      this.classList.add('active');
+      var status = this.dataset.sfilter;
+      var iframe = el('sessionsIframe');
+      if (iframe && iframe.contentWindow && typeof iframe.contentWindow.setSessionStatusFilter === 'function') {
+        iframe.contentWindow.setSessionStatusFilter(status === 'all' ? null : status);
+      }
+    });
+  });
+
   // Detail panel close
   const closeBtn = el('detailClose');
   if (closeBtn) closeBtn.addEventListener('click', closeDetailPanel);
@@ -1764,14 +1788,34 @@ function renderHarnessGrid(projects) {
     return p.snapshotProjectPath && !p.snapshotProjectPath.includes('\\Temp\\');
   });
 
-  if (real.length === 0) {
+  // Apply the active status filter (All / Active / Paused / At Gate)
+  var filtered = real.filter(function (p) {
+    if (activeHarnessFilter === 'active') return !p.snapshotIsPaused && !p.snapshotIsComplete;
+    if (activeHarnessFilter === 'paused') return !!p.snapshotIsPaused;
+    if (activeHarnessFilter === 'gate') return (p.snapshotGatesPending || []).length > 0;
+    return true; // 'all'
+  });
+
+  // Update the filter hint (count when a filter is active)
+  var hint = el('harnessFilterHint');
+  if (hint) hint.textContent = activeHarnessFilter === 'all'
+    ? ''
+    : filtered.length + ' ' + (activeHarnessFilter === 'gate' ? 'at gate' : activeHarnessFilter);
+
+  if (filtered.length === 0) {
     grid.innerHTML = '';
-    if (empty) empty.style.display = '';
+    if (empty) {
+      empty.style.display = '';
+      var filterLabels = { active: 'Active', paused: 'Paused', gate: 'At Gate' };
+      empty.textContent = real.length === 0
+        ? 'No active harnesses. Launch a session with a harness via the launcher to get started.'
+        : 'No harnesses match the "' + (filterLabels[activeHarnessFilter] || activeHarnessFilter) + '" filter.';
+    }
     return;
   }
   if (empty) empty.style.display = 'none';
 
-  grid.innerHTML = real.map(function (p) {
+  grid.innerHTML = filtered.map(function (p) {
     var phases = getPhaseSequence(p.snapshotHarness);
     var currentIdx = phases.indexOf(p.snapshotCurrentPhase);
     var isPaused = p.snapshotIsPaused || false;

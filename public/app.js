@@ -13,6 +13,20 @@ let transcriptLoaded = false;
 let sessionThinking = {}; // sessionId -> boolean
 let sessionUsage = {}; // sessionId -> { totalTokens, estimatedCostUSD }
 let globalAutoApprove = false;
+let sessionStatusFilter = null; // null = All; otherwise 'active' | 'waiting' | 'completed'
+
+// Filter sessions by the status pill selected in the parent dashboard frame.
+function filterByStatus(list) {
+  if (!sessionStatusFilter) return list;
+  return list.filter(s => s.status === sessionStatusFilter);
+}
+
+// Called from the parent frame (portfolio.js) when a Sessions status pill is clicked.
+window.setSessionStatusFilter = function (status) {
+  sessionStatusFilter = status || null;
+  renderSidebar();
+  renderGrid();
+};
 
 // === SOCKET EVENT HANDLERS ===
 socket.on('connect', () => {
@@ -260,12 +274,15 @@ function renderSidebar() {
   const list = document.getElementById('sessionList');
   if (!list) return;
 
-  if (sessions.length === 0) {
-    list.innerHTML = '<div style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 12px;">No sessions</div>';
+  const visible = filterByStatus(sessions);
+
+  if (visible.length === 0) {
+    list.innerHTML = '<div style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 12px;">' +
+      (sessions.length === 0 ? 'No sessions' : 'No ' + sessionStatusFilter + ' sessions') + '</div>';
     return;
   }
 
-  list.innerHTML = sessions.map(s => {
+  list.innerHTML = visible.map(s => {
     const isSelected = s.id === selectedSessionId;
     const needsAttention = s.status === 'waiting';
     const working = isSessionWorking(s);
@@ -303,11 +320,20 @@ function renderGrid() {
   const grid = document.getElementById('sessionGrid');
   if (!grid) return;
 
+  const base = filterByStatus(sessions);
   const filtered = selectedSessionId
-    ? sessions.filter(s => s.id === selectedSessionId)
-    : sessions;
+    ? base.filter(s => s.id === selectedSessionId)
+    : base;
 
   if (filtered.length === 0) {
+    // Distinguish "nothing at all" from "nothing matches the active filter"
+    if (sessionStatusFilter && sessions.length > 0) {
+      grid.innerHTML = '<div class="empty-state">' +
+        '<h3>No ' + sessionStatusFilter + ' sessions</h3>' +
+        '<p>No sessions match the &ldquo;' + sessionStatusFilter + '&rdquo; filter. Choose &ldquo;All&rdquo; to see every session.</p>' +
+      '</div>';
+      return;
+    }
     grid.innerHTML = '<div class="empty-state">' +
       '<h3>No sessions running</h3>' +
       '<p>Launch a new session to get started. Use the "+ New Session" button or press Ctrl+N.</p>' +
